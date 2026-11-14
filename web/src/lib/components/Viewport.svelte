@@ -61,8 +61,8 @@
   let glCanvasEl: HTMLCanvasElement | null = $state(null);
   let overlayCanvasEl: HTMLCanvasElement | null = $state(null);
 
-  let renderer: TraceRenderer | null = null;
-  let overlayCtx: CanvasRenderingContext2D | null = null;
+  let renderer = $state<TraceRenderer | null>(null);
+  let overlayCtx = $state<CanvasRenderingContext2D | null>(null);
   let resizeObserver: ResizeObserver | null = null;
   let animFrameId: number = 0;
 
@@ -113,6 +113,33 @@
     // Redraw whenever annotations, hovered, or selected changes
     if (annotations || selectedAnnotationId) {
       requestDraw();
+    }
+  });
+
+  $effect(() => {
+    if (glCanvasEl && !renderer) {
+      renderer = new TraceRenderer(glCanvasEl);
+      const bg = isDark ? '#121214' : '#ffffff';
+      const grid = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)';
+      renderer.setTheme({ background: bg, grid });
+      if (traces && styles) {
+        renderer.setData(traces, styles);
+      }
+      handleResize();
+      requestDraw();
+    } else if (!glCanvasEl && renderer) {
+      renderer.dispose();
+      renderer = null;
+    }
+  });
+
+  $effect(() => {
+    if (overlayCanvasEl && !overlayCtx) {
+      overlayCtx = overlayCanvasEl.getContext('2d');
+      handleResize();
+      requestDraw();
+    } else if (!overlayCanvasEl && overlayCtx) {
+      overlayCtx = null;
     }
   });
 

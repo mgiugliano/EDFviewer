@@ -1,7 +1,7 @@
 import type { ViewerAnnotation } from './types.js';
 
 const DB_NAME = 'edf-viewer';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'annotations';
 
 // Fallback in-memory cache for SSR / Node tests where IndexedDB is absent
