@@ -8,3 +8,6 @@ export { default as GoToTimeModal } from './GoToTimeModal.svelte';
 export { default as KeyboardShortcutsModal } from './KeyboardShortcutsModal.svelte';
 export { default as AddDerivationModal } from './AddDerivationModal.svelte';
 export { default as PresetNameModal } from './PresetNameModal.svelte';
+export { default as AnnotationSidebar } from './AnnotationSidebar.svelte';
+export { default as EditAnnotationModal } from './EditAnnotationModal.svelte';
+export { default as AnnotationPalette } from './AnnotationPalette.svelte';

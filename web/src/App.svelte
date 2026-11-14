@@ -30,6 +30,8 @@
   import Toolbar from './lib/components/Toolbar.svelte';
   import Viewport from './lib/components/Viewport.svelte';
   import ChannelSidebar from './lib/components/ChannelSidebar.svelte';
+  import AnnotationSidebar from './lib/components/AnnotationSidebar.svelte';
+  import AnnotationPalette from './lib/components/AnnotationPalette.svelte';
   import ScrubberBar from './lib/components/ScrubberBar.svelte';
   import NavigationControls from './lib/components/NavigationControls.svelte';
 
@@ -39,6 +41,21 @@
   import KeyboardShortcutsModal from './lib/components/KeyboardShortcutsModal.svelte';
   import AddDerivationModal from './lib/components/AddDerivationModal.svelte';
   import PresetNameModal from './lib/components/PresetNameModal.svelte';
+  import EditAnnotationModal from './lib/components/EditAnnotationModal.svelte';
+
+  // Annotations
+  import {
+    AnnotationAutosaver,
+    convertEmbeddedAnnotations,
+    DEFAULT_ANNOTATION_PRESETS,
+    findNextAnnotationTime,
+    findPrevAnnotationTime,
+    loadAnnotationsFromIdb,
+    makeAnnotationStorageKey,
+    clearAnnotationsFromIdb,
+    type AnnotationPreset,
+    type ViewerAnnotation,
+  } from './lib/annotations/index.js';
 
   // Application State using Svelte 5 Runes
   let edfClient: EdfClient | null = null;
@@ -75,6 +92,18 @@
   let showShortcutsModal = $state<boolean>(false);
   let showAddDerivationModal = $state<boolean>(false);
   let showPresetNameModal = $state<boolean>(false);
+
+  // Annotations State
+  let annotations = $state<ViewerAnnotation[]>([]);
+  let activePreset = $state<AnnotationPreset>(DEFAULT_ANNOTATION_PRESETS[0]);
+  let isAnnotateMode = $state<boolean>(false);
+  let isAnnotationSidebarOpen = $state<boolean>(false);
+  let editingAnnotation = $state<ViewerAnnotation | null>(null);
+  let showEditAnnotationModal = $state<boolean>(false);
+  let currentStorageKey = $state<string>('');
+  const autosaver = new AnnotationAutosaver(500);
+
+  const channelLabels = $derived(montage.channels.map((c) => c.label));
 
   // Playback / Auto-scroll state
   let isPlaying = $state<boolean>(false);
@@ -132,6 +161,14 @@
     edfClient.onProgress((prog) => {
       scanProgress = prog;
     });
+    edfClient.onAnnotations((items, _done) => {
+      if (!items || items.length === 0) return;
+      const existingIds = new Set(annotations.map((a) => a.id));
+      const converted = convertEmbeddedAnnotations(items, existingIds);
+      if (converted.length > 0) {
+        annotations = [...annotations, ...converted].sort((a, b) => a.onset - b.onset);
+      }
+    });
 
     window.addEventListener('keydown', handleGlobalKeydown);
   });
@@ -149,6 +186,13 @@
       localStorage.setItem('edf_viewer_theme', isDark ? 'dark' : 'light');
     } catch {
       // ignore
+    }
+  });
+
+  // Autosave annotations to IndexedDB whenever changed
+  $effect(() => {
+    if (currentStorageKey && annotations) {
+      autosaver.schedule(currentStorageKey, annotations);
     }
   });
 
@@ -184,7 +228,12 @@
     const req: ViewRequest = {
       t0,
       t1,
-      widthPx: Math.max(800, window.innerWidth - (isSidebarOpen ? 320 : 40)),
+      widthPx: Math.max(
+        800,
+        window.innerWidth -
+          (isSidebarOpen ? 320 : 40) -
+          (isAnnotationSidebarOpen ? 320 : 0)
+      ),
       channels: visibleChannels.map((c) => ({
         a: c.signalIndexA,
         b: c.signalIndexB,
@@ -254,6 +303,13 @@
       } else {
         montage = createDefaultMontage(info);
       }
+
+      // Load saved annotations for this file from IndexedDB
+      currentStorageKey = makeAnnotationStorageKey(file);
+      const savedAnns = await loadAnnotationsFromIdb(currentStorageKey);
+      annotations = savedAnns ? savedAnns : [];
+      editingAnnotation = null;
+      showEditAnnotationModal = false;
 
       isLoading = false;
     } catch (err: any) {
@@ -446,6 +502,91 @@
   }
 
   // -------------------------------------------------------------------------
+  // Annotations Actions
+  // -------------------------------------------------------------------------
+
+  function handleCreateAnnotation(annData: {
+    onset: number;
+    duration: number;
+    label: string;
+    channel?: string;
+    color: string;
+  }) {
+    const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : 'ann_' + Math.random().toString(36).slice(2, 10) + '_' + Date.now().toString(36);
+
+    const newAnn: ViewerAnnotation = {
+      id,
+      onset: annData.onset,
+      duration: annData.duration,
+      label: annData.label,
+      channel: annData.channel,
+      color: annData.color,
+      source: 'manual',
+    };
+
+    annotations = [...annotations, newAnn].sort((a, b) => a.onset - b.onset);
+    editingAnnotation = newAnn;
+    showEditAnnotationModal = true;
+  }
+
+  function handleSaveAnnotation(updated: ViewerAnnotation) {
+    const exists = annotations.some((a) => a.id === updated.id);
+    if (exists) {
+      annotations = annotations
+        .map((a) => (a.id === updated.id ? updated : a))
+        .sort((a, b) => a.onset - b.onset);
+    } else {
+      annotations = [...annotations, updated].sort((a, b) => a.onset - b.onset);
+    }
+    showEditAnnotationModal = false;
+    editingAnnotation = null;
+  }
+
+  function handleDeleteAnnotation(id: string) {
+    annotations = annotations.filter((a) => a.id !== id);
+    if (editingAnnotation?.id === id) {
+      showEditAnnotationModal = false;
+      editingAnnotation = null;
+    }
+  }
+
+  function handleClearAllAnnotations() {
+    annotations = [];
+    if (currentStorageKey) {
+      clearAnnotationsFromIdb(currentStorageKey);
+    }
+  }
+
+  function handleImportAnnotations(imported: ViewerAnnotation[]) {
+    const existingIds = new Set(annotations.map((a) => a.id));
+    const newItems = imported.filter((a) => !existingIds.has(a.id));
+    annotations = [...annotations, ...newItems].sort((a, b) => a.onset - b.onset);
+  }
+
+  function handleJumpToAnnotation(onsetSec: number) {
+    const target = Math.max(0, onsetSec - 1.0);
+    tStart = Math.max(0, Math.min(Math.max(0, duration - pageDurationSec), target));
+  }
+
+  function handleJumpNextAnnotation() {
+    if (annotations.length === 0) return;
+    const nextTime = findNextAnnotationTime(annotations, tStart);
+    if (nextTime !== null) {
+      handleJumpToAnnotation(nextTime);
+    }
+  }
+
+  function handleJumpPrevAnnotation() {
+    if (annotations.length === 0) return;
+    const prevTime = findPrevAnnotationTime(annotations, tStart);
+    if (prevTime !== null) {
+      handleJumpToAnnotation(prevTime);
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Keyboard Shortcuts
   // -------------------------------------------------------------------------
 
@@ -457,6 +598,36 @@
       target.tagName === 'SELECT' ||
       target.tagName === 'TEXTAREA'
     ) {
+      return;
+    }
+
+    // 1-9 quick annotation preset keys
+    const num = parseInt(e.key, 10);
+    if (!isNaN(num) && num >= 1 && num <= 9) {
+      e.preventDefault();
+      const p = DEFAULT_ANNOTATION_PRESETS.find((item) => item.key === e.key);
+      if (p) {
+        activePreset = p;
+        isAnnotateMode = true;
+      }
+      return;
+    }
+
+    if (e.key === 'a' || e.key === 'A') {
+      e.preventDefault();
+      isAnnotationSidebarOpen = !isAnnotationSidebarOpen;
+      return;
+    }
+
+    if (e.key === 'n' || e.key === 'N') {
+      e.preventDefault();
+      handleJumpNextAnnotation();
+      return;
+    }
+
+    if (e.key === 'p' || e.key === 'P') {
+      e.preventDefault();
+      handleJumpPrevAnnotation();
       return;
     }
 
@@ -511,6 +682,7 @@
       showShortcutsModal = false;
       showAddDerivationModal = false;
       showPresetNameModal = false;
+      showEditAnnotationModal = false;
     }
   }
 </script>
@@ -542,6 +714,8 @@
     {isDark}
     {pageDurationSec}
     {isSidebarOpen}
+    {isAnnotationSidebarOpen}
+    annotationCount={annotations.length}
     onOpenFile={handleOpenFile}
     onSelectPreset={handleSelectPreset}
     onResetDefaultMontage={handleResetDefaultMontage}
@@ -554,6 +728,8 @@
     }}
     onToggleTheme={() => (isDark = !isDark)}
     onToggleSidebar={() => (isSidebarOpen = !isSidebarOpen)}
+    onToggleAnnotationSidebar={() =>
+      (isAnnotationSidebarOpen = !isAnnotationSidebarOpen)}
     onOpenShortcuts={() => (showShortcutsModal = true)}
   />
 
@@ -583,7 +759,17 @@
         {recordingStartDate}
         {isLoading}
         {needsZoomWarning}
+        {annotations}
+        {isAnnotateMode}
+        {activePreset}
+        selectedAnnotationId={editingAnnotation?.id ?? null}
         onTimeChange={handleTimeChange}
+        onCreateAnnotation={handleCreateAnnotation}
+        onSelectAnnotation={(ann) => (editingAnnotation = ann)}
+        onEditAnnotation={(ann) => {
+          editingAnnotation = ann;
+          showEditAnnotationModal = true;
+        }}
         onOpenFilePrompt={() => {
           const input = document.querySelector<HTMLInputElement>(
             'header input[type="file"]'
@@ -592,11 +778,45 @@
         }}
       />
     </main>
+
+    <!-- Annotations Sidebar -->
+    <AnnotationSidebar
+      isOpen={isAnnotationSidebarOpen}
+      {fileName}
+      {annotations}
+      {channelLabels}
+      onToggleOpen={() =>
+        (isAnnotationSidebarOpen = !isAnnotationSidebarOpen)}
+      onJumpToAnnotation={handleJumpToAnnotation}
+      onEditAnnotation={(ann) => {
+        editingAnnotation = ann;
+        showEditAnnotationModal = true;
+      }}
+      onDeleteAnnotation={handleDeleteAnnotation}
+      onImportAnnotations={handleImportAnnotations}
+      onClearAll={handleClearAllAnnotations}
+    />
   </div>
 
   <!-- Bottom Overview & Controls -->
   {#if header}
     <footer class="bottom-bar">
+      <!-- Quick Label Annotation Palette -->
+      <AnnotationPalette
+        {isAnnotateMode}
+        {activePreset}
+        annotationCount={annotations.length}
+        onToggleAnnotateMode={() => (isAnnotateMode = !isAnnotateMode)}
+        onSelectPreset={(p) => {
+          activePreset = p;
+          isAnnotateMode = true;
+        }}
+        onJumpPrev={handleJumpPrevAnnotation}
+        onJumpNext={handleJumpNextAnnotation}
+        onToggleSidebar={() =>
+          (isAnnotationSidebarOpen = !isAnnotationSidebarOpen)}
+      />
+
       <!-- Mini Overview Scrubber Bar -->
       <ScrubberBar
         {duration}
@@ -662,6 +882,18 @@
     defaultName={montage.name}
     onSave={handleSavePresetName}
     onClose={() => (showPresetNameModal = false)}
+  />
+
+  <EditAnnotationModal
+    isOpen={showEditAnnotationModal}
+    annotation={editingAnnotation}
+    {channelLabels}
+    onSave={handleSaveAnnotation}
+    onDelete={handleDeleteAnnotation}
+    onClose={() => {
+      showEditAnnotationModal = false;
+      editingAnnotation = null;
+    }}
   />
 </div>
 

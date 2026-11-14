@@ -14,6 +14,8 @@
     isDark: boolean;
     pageDurationSec: number;
     isSidebarOpen: boolean;
+    isAnnotationSidebarOpen?: boolean;
+    annotationCount?: number;
     onOpenFile: (file: File) => void;
     onSelectPreset: (preset: SavedMontagePreset) => void;
     onResetDefaultMontage: () => void;
@@ -23,6 +25,7 @@
     onChangePageDuration: (dur: number) => void;
     onToggleTheme: () => void;
     onToggleSidebar: () => void;
+    onToggleAnnotationSidebar?: () => void;
     onOpenShortcuts: () => void;
   }
 
@@ -34,6 +37,8 @@
     isDark,
     pageDurationSec,
     isSidebarOpen,
+    isAnnotationSidebarOpen = false,
+    annotationCount = 0,
     onOpenFile,
     onSelectPreset,
     onResetDefaultMontage,
@@ -43,6 +48,7 @@
     onChangePageDuration,
     onToggleTheme,
     onToggleSidebar,
+    onToggleAnnotationSidebar,
     onOpenShortcuts,
   }: Props = $props();
 
@@ -182,6 +188,16 @@
         </optgroup>
       </select>
     </div>
+
+    <!-- Annotations Sidebar Toggle -->
+    <button
+      class="toolbar-btn {isAnnotationSidebarOpen ? 'active' : ''}"
+      onclick={onToggleAnnotationSidebar}
+      title="Toggle Annotations Sidebar (A)"
+    >
+      <span class="btn-icon">🏷️</span>
+      <span>Annotations ({annotationCount})</span>
+    </button>
 
     <!-- Page Duration Selector -->
     <div class="page-duration-box">

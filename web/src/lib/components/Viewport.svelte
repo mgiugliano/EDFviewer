@@ -2,7 +2,10 @@
   import { onDestroy, onMount } from 'svelte';
   import { TraceRenderer } from '../render/TraceRenderer.js';
   import { drawOverlay } from '../render/Overlay.js';
+  import { drawAnnotations, hitTestAnnotation } from '../render/AnnotationOverlay.js';
   import type { ChannelStyle, TraceData, Viewport as RenderViewport } from '../render/types.js';
+  import type { AnnotationPreset, ViewerAnnotation } from '../annotations/types.js';
+  import { DEFAULT_ANNOTATION_PRESETS } from '../annotations/types.js';
 
   interface Props {
     hasFile: boolean;
@@ -15,8 +18,21 @@
     recordingStartDate?: Date;
     isLoading?: boolean;
     needsZoomWarning?: string | null;
+    annotations?: ViewerAnnotation[];
+    isAnnotateMode?: boolean;
+    activePreset?: AnnotationPreset;
+    selectedAnnotationId?: string | null;
     onTimeChange: (newTStart: number, newTEnd: number) => void;
     onOpenFilePrompt?: () => void;
+    onCreateAnnotation?: (ann: {
+      onset: number;
+      duration: number;
+      label: string;
+      channel?: string;
+      color: string;
+    }) => void;
+    onSelectAnnotation?: (ann: ViewerAnnotation) => void;
+    onEditAnnotation?: (ann: ViewerAnnotation) => void;
   }
 
   let {
@@ -30,8 +46,15 @@
     recordingStartDate,
     isLoading = false,
     needsZoomWarning = null,
+    annotations = [],
+    isAnnotateMode = false,
+    activePreset = DEFAULT_ANNOTATION_PRESETS[0],
+    selectedAnnotationId = null,
     onTimeChange,
     onOpenFilePrompt,
+    onCreateAnnotation,
+    onSelectAnnotation,
+    onEditAnnotation,
   }: Props = $props();
 
   let containerEl: HTMLDivElement | null = $state(null);
@@ -44,12 +67,24 @@
   let animFrameId: number = 0;
 
   // Local pan / drag state
-  let isDragging = false;
+  let isDragging = $state(false);
   let dragStartX = 0;
   let dragStartT0 = 0;
   let dragStartT1 = 0;
   let localT0 = $state(0);
   let localT1 = $state(10);
+
+  // Annotation interaction state
+  let isShiftOrAltPressed = $state(false);
+  let isCreatingAnnotation = $state(false);
+  let createStartX = 0;
+  let createStartY = 0;
+  let createStartT = 0;
+  let creatingRange = $state<{ t0: number; t1: number; label: string; color: string } | null>(null);
+
+  // Hovered annotation & tooltip
+  let hoveredAnnotation = $state<ViewerAnnotation | null>(null);
+  let tooltipPos = $state<{ x: number; y: number } | null>(null);
 
   $effect(() => {
     if (!isDragging) {
@@ -74,6 +109,13 @@
     }
   });
 
+  $effect(() => {
+    // Redraw whenever annotations, hovered, or selected changes
+    if (annotations || selectedAnnotationId) {
+      requestDraw();
+    }
+  });
+
   onMount(() => {
     if (glCanvasEl) {
       renderer = new TraceRenderer(glCanvasEl);
@@ -93,13 +135,30 @@
       resizeObserver.observe(containerEl);
       handleResize();
     }
+
+    window.addEventListener('keydown', handleKeyModDown);
+    window.addEventListener('keyup', handleKeyModUp);
   });
 
   onDestroy(() => {
     if (animFrameId) cancelAnimationFrame(animFrameId);
     if (resizeObserver) resizeObserver.disconnect();
     if (renderer) renderer.dispose();
+    window.removeEventListener('keydown', handleKeyModDown);
+    window.removeEventListener('keyup', handleKeyModUp);
   });
+
+  function handleKeyModDown(e: KeyboardEvent) {
+    if (e.key === 'Shift' || e.key === 'Alt') {
+      isShiftOrAltPressed = true;
+    }
+  }
+
+  function handleKeyModUp(e: KeyboardEvent) {
+    if (e.key === 'Shift' || e.key === 'Alt') {
+      isShiftOrAltPressed = false;
+    }
+  }
 
   function handleResize() {
     if (!containerEl || !renderer || !overlayCanvasEl) return;
@@ -149,7 +208,7 @@
     // 1. WebGL trace draw
     renderer.render(vp);
 
-    // 2. 2D overlay draw
+    // 2. 2D overlay draw (grid, time axis, lane separators, channel labels)
     drawOverlay(overlayCtx, vp, {
       channels: styles,
       gridColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
@@ -166,11 +225,63 @@
       showLaneSeparators: true,
       showTimeAxis: true,
     });
+
+    // 3. Annotations draw (bands, point markers, chips, active creation preview)
+    drawAnnotations(overlayCtx, vp, annotations, {
+      channels: styles,
+      hoveredId: hoveredAnnotation?.id,
+      selectedId: selectedAnnotationId,
+      creatingRange,
+      timeAxisHeightPx: 24,
+    });
   }
 
-  // Pointer panning handlers
+  // Pointer event handlers
   function handlePointerDown(e: PointerEvent) {
     if (!hasFile || !containerEl) return;
+    const rect = containerEl.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const vp: RenderViewport = {
+      tStart: localT0,
+      tEnd: localT1,
+      widthPx: rect.width,
+      heightPx: rect.height,
+      dpr: window.devicePixelRatio || 1,
+    };
+
+    const isInAnnotateMode = isAnnotateMode || isShiftOrAltPressed || e.shiftKey || e.altKey;
+
+    // Check if clicking directly on an existing annotation
+    const hit = hitTestAnnotation(mouseX, mouseY, vp, annotations, styles);
+    if (hit && !isInAnnotateMode) {
+      if (onSelectAnnotation) onSelectAnnotation(hit);
+      if (onEditAnnotation) onEditAnnotation(hit);
+      return;
+    }
+
+    // Creating a new annotation
+    if (isInAnnotateMode) {
+      containerEl.setPointerCapture(e.pointerId);
+      isCreatingAnnotation = true;
+      createStartX = mouseX;
+      createStartY = mouseY;
+      const dt = localT1 - localT0;
+      createStartT = localT0 + (mouseX / rect.width) * dt;
+      creatingRange = {
+        t0: Math.max(0, Math.min(duration || 10, createStartT)),
+        t1: Math.max(0, Math.min(duration || 10, createStartT)),
+        label: activePreset.label,
+        color: activePreset.color,
+      };
+      tooltipPos = null;
+      hoveredAnnotation = null;
+      requestDraw();
+      return;
+    }
+
+    // Normal time panning
     containerEl.setPointerCapture(e.pointerId);
     isDragging = true;
     dragStartX = e.clientX;
@@ -178,37 +289,130 @@
     dragStartT1 = tEnd;
     localT0 = tStart;
     localT1 = tEnd;
+    tooltipPos = null;
   }
 
   function handlePointerMove(e: PointerEvent) {
-    if (!isDragging || !containerEl) return;
+    if (!hasFile || !containerEl) return;
     const rect = containerEl.getBoundingClientRect();
-    const dx = e.clientX - dragStartX;
-    const dt = dragStartT1 - dragStartT0;
-    const timeDelta = (dx / rect.width) * dt;
+    const mouseX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const mouseY = e.clientY - rect.top;
 
-    let newT0 = dragStartT0 - timeDelta;
-    let newT1 = dragStartT1 - timeDelta;
-
-    if (newT0 < 0) {
-      newT1 += -newT0;
-      newT0 = 0;
+    // 1. Annotation creation drag
+    if (isCreatingAnnotation) {
+      const dt = localT1 - localT0;
+      const curT = localT0 + (mouseX / rect.width) * dt;
+      creatingRange = {
+        t0: Math.max(0, Math.min(duration || 10, createStartT)),
+        t1: Math.max(0, Math.min(duration || 10, curT)),
+        label: activePreset.label,
+        color: activePreset.color,
+      };
+      requestDraw();
+      return;
     }
-    if (newT1 > duration && duration > 0) {
-      const over = newT1 - duration;
-      newT0 = Math.max(0, newT0 - over);
-      newT1 = duration;
+
+    // 2. Normal timeline panning drag
+    if (isDragging) {
+      const dx = e.clientX - dragStartX;
+      const dt = dragStartT1 - dragStartT0;
+      const timeDelta = (dx / rect.width) * dt;
+
+      let newT0 = dragStartT0 - timeDelta;
+      let newT1 = dragStartT1 - timeDelta;
+
+      if (newT0 < 0) {
+        newT1 += -newT0;
+        newT0 = 0;
+      }
+      if (newT1 > duration && duration > 0) {
+        const over = newT1 - duration;
+        newT0 = Math.max(0, newT0 - over);
+        newT1 = duration;
+      }
+
+      localT0 = newT0;
+      localT1 = newT1;
+
+      requestDraw();
+      return;
     }
 
-    localT0 = newT0;
-    localT1 = newT1;
+    // 3. Hover hit-testing when idle
+    const vp: RenderViewport = {
+      tStart: localT0,
+      tEnd: localT1,
+      widthPx: rect.width,
+      heightPx: rect.height,
+      dpr: window.devicePixelRatio || 1,
+    };
 
-    // Fast visual update
-    requestDraw();
+    const hit = hitTestAnnotation(mouseX, mouseY, vp, annotations, styles);
+    if (hit !== hoveredAnnotation) {
+      hoveredAnnotation = hit;
+      requestDraw();
+    }
+
+    if (hit) {
+      tooltipPos = { x: mouseX, y: mouseY };
+    } else {
+      tooltipPos = null;
+    }
   }
 
   function handlePointerUp(e: PointerEvent) {
-    if (isDragging && containerEl) {
+    if (!containerEl) return;
+
+    if (isCreatingAnnotation) {
+      try {
+        containerEl.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+      isCreatingAnnotation = false;
+
+      const rect = containerEl.getBoundingClientRect();
+      const mouseX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+      const dt = localT1 - localT0;
+      const curT = localT0 + (mouseX / rect.width) * dt;
+
+      const dxPx = Math.abs(mouseX - createStartX);
+      let finalOnset = Math.min(createStartT, curT);
+      let finalDur = Math.abs(curT - createStartT);
+
+      // If clicked without drag or drag is smaller than 5px / 0.03s, treat as point marker
+      if (dxPx < 5 || finalDur < 0.03) {
+        finalOnset = createStartT;
+        finalDur = 0;
+      }
+
+      // Check which channel lane was targeted
+      let clickedChannel: string | undefined = undefined;
+      const traceHeight = rect.height - 24;
+      if (styles.length > 0 && createStartY <= traceHeight && createStartY >= 0) {
+        const laneH = traceHeight / styles.length;
+        const laneIdx = Math.floor(createStartY / laneH);
+        if (laneIdx >= 0 && laneIdx < styles.length) {
+          clickedChannel = styles[laneIdx].label;
+        }
+      }
+
+      creatingRange = null;
+      requestDraw();
+
+      if (onCreateAnnotation) {
+        onCreateAnnotation({
+          onset: parseFloat(Math.max(0, finalOnset).toFixed(4)),
+          duration: parseFloat(Math.max(0, finalDur).toFixed(4)),
+          label: activePreset.label,
+          channel: clickedChannel,
+          color: activePreset.color,
+        });
+      }
+      return;
+    }
+
+    if (isDragging) {
       try {
         containerEl.releasePointerCapture(e.pointerId);
       } catch {
@@ -216,6 +420,14 @@
       }
       isDragging = false;
       onTimeChange(localT0, localT1);
+    }
+  }
+
+  function handlePointerLeave() {
+    if (!isDragging && !isCreatingAnnotation) {
+      hoveredAnnotation = null;
+      tooltipPos = null;
+      requestDraw();
     }
   }
 
@@ -252,16 +464,25 @@
 
     onTimeChange(newT0, newT1);
   }
+
+  const cursorClass = $derived.by(() => {
+    if (isCreatingAnnotation) return 'crosshair';
+    if (isDragging) return 'grabbing';
+    if (hoveredAnnotation) return 'pointer';
+    if (isAnnotateMode || isShiftOrAltPressed) return 'crosshair';
+    return 'grab';
+  });
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="viewport-container"
+  class="viewport-container {cursorClass}"
   bind:this={containerEl}
   onpointerdown={handlePointerDown}
   onpointermove={handlePointerMove}
   onpointerup={handlePointerUp}
   onpointercancel={handlePointerUp}
+  onpointerleave={handlePointerLeave}
   onwheel={handleWheel}
 >
   {#if hasFile}
@@ -279,6 +500,49 @@
     {#if needsZoomWarning}
       <div class="needs-zoom-banner">
         ⚠️ {needsZoomWarning}
+      </div>
+    {/if}
+
+    <!-- Annotate Mode Floating Banner Indicator -->
+    {#if isAnnotateMode || isShiftOrAltPressed}
+      <div class="annotate-mode-badge" style="border-color: {activePreset.color};">
+        <span class="badge-dot" style="background-color: {activePreset.color};"></span>
+        <span>Annotating: <strong>{activePreset.label}</strong> (Drag to mark duration, click for point)</span>
+      </div>
+    {/if}
+
+    <!-- Hover Tooltip -->
+    {#if hoveredAnnotation && tooltipPos && !isDragging && !isCreatingAnnotation}
+      <div
+        class="annotation-tooltip"
+        style="left: {Math.min(tooltipPos.x + 12, (containerEl?.clientWidth ?? 600) - 200)}px; top: {Math.max(10, tooltipPos.y - 60)}px;"
+      >
+        <div class="tooltip-header">
+          <span
+            class="tooltip-dot"
+            style="background-color: {hoveredAnnotation.color || '#3b82f6'};"
+          ></span>
+          <strong>{hoveredAnnotation.label}</strong>
+          {#if hoveredAnnotation.duration > 0}
+            <span class="tooltip-badge">{hoveredAnnotation.duration.toFixed(2)}s</span>
+          {:else}
+            <span class="tooltip-badge">Point</span>
+          {/if}
+        </div>
+        <div class="tooltip-row">
+          <span>Time:</span>
+          <strong>{hoveredAnnotation.onset.toFixed(3)}s</strong>
+        </div>
+        {#if hoveredAnnotation.channel && hoveredAnnotation.channel !== 'ALL'}
+          <div class="tooltip-row">
+            <span>Channel:</span>
+            <strong>{hoveredAnnotation.channel}</strong>
+          </div>
+        {/if}
+        {#if hoveredAnnotation.note}
+          <div class="tooltip-note">{hoveredAnnotation.note}</div>
+        {/if}
+        <div class="tooltip-hint">Click to edit</div>
       </div>
     {/if}
   {:else}
@@ -311,6 +575,22 @@
     background-color: var(--canvas-bg);
     touch-action: none;
     user-select: none;
+  }
+
+  .viewport-container.grab {
+    cursor: grab;
+  }
+
+  .viewport-container.grabbing {
+    cursor: grabbing;
+  }
+
+  .viewport-container.crosshair {
+    cursor: crosshair;
+  }
+
+  .viewport-container.pointer {
+    cursor: pointer;
   }
 
   .gl-canvas,
@@ -374,6 +654,100 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     pointer-events: none;
     z-index: 10;
+  }
+
+  .annotate-mode-badge {
+    position: absolute;
+    top: 12px;
+    left: 16px;
+    background: rgba(20, 20, 24, 0.9);
+    color: #ffffff;
+    border: 1.5px solid var(--accent-color);
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 11px;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .badge-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .annotation-tooltip {
+    position: absolute;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+    z-index: 25;
+    min-width: 140px;
+    max-width: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .tooltip-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-primary);
+  }
+
+  .tooltip-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .tooltip-badge {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    font-size: 10px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: var(--text-secondary);
+    margin-left: auto;
+  }
+
+  .tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .tooltip-row strong {
+    color: var(--text-primary);
+  }
+
+  .tooltip-note {
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    padding: 3px 6px;
+    border-radius: 4px;
+    margin-top: 2px;
+    border-left: 2px solid var(--accent-color);
+  }
+
+  .tooltip-hint {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-align: right;
+    margin-top: 2px;
+    font-style: italic;
   }
 
   .empty-state {
