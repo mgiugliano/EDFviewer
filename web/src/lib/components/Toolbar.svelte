@@ -16,6 +16,9 @@
     isSidebarOpen: boolean;
     isAnnotationSidebarOpen?: boolean;
     annotationCount?: number;
+    isSpectrogramMode?: boolean;
+    canEnableSpectrogram?: boolean;
+    onToggleSpectrogram?: () => void;
     onOpenFile: (file: File) => void;
     onSelectPreset: (preset: SavedMontagePreset) => void;
     onResetDefaultMontage: () => void;
@@ -43,6 +46,9 @@
     isSidebarOpen,
     isAnnotationSidebarOpen = false,
     annotationCount = 0,
+    isSpectrogramMode = false,
+    canEnableSpectrogram = false,
+    onToggleSpectrogram,
     onOpenFile,
     onSelectPreset,
     onResetDefaultMontage,
@@ -249,6 +255,20 @@
       <span>Redraw</span>
     </button>
 
+    <!-- Spectrogram Toggle Button -->
+    <button
+      class="toolbar-btn spectrogram-btn {isSpectrogramMode ? 'active' : ''}"
+      disabled={!canEnableSpectrogram}
+      onclick={onToggleSpectrogram}
+      title={canEnableSpectrogram
+        ? 'Toggle Spectrogram View for current single channel (S)'
+        : 'Enable exactly one channel to display spectrogram'}
+      aria-label="Toggle Spectrogram"
+    >
+      <span class="btn-icon">📊</span>
+      <span>Spectrogram</span>
+    </button>
+
     <!-- Theme Toggle -->
     <button
       class="icon-btn"
@@ -328,6 +348,19 @@
 
   .toolbar-btn.primary:hover {
     background: var(--accent-hover);
+  }
+
+  .toolbar-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: var(--bg-tertiary) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-muted) !important;
+  }
+
+  .toolbar-btn.active {
+    background: var(--accent-color);
+    color: #ffffff;
   }
 
   .btn-icon {

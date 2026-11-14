@@ -257,6 +257,69 @@ async function main() {
     await page.keyboard.press('Escape');
     await sleep(300);
 
+    // 15. Test Spectrogram button and single-channel gating
+    console.log('Testing Spectrogram button gating (multiple channels visible)...');
+    const specBtn = await page.$('button.spectrogram-btn');
+    if (!specBtn) {
+      throw new Error('Spectrogram button not found in toolbar');
+    }
+    let isSpecDisabled = await specBtn.isDisabled();
+    console.log(`Spectrogram button disabled when multiple channels visible: ${isSpecDisabled}`);
+    if (!isSpecDisabled) {
+      throw new Error('Spectrogram button should be disabled when multiple channels are visible');
+    }
+
+    // Uncheck all channels except channel 0 in the left sidebar
+    console.log('Unchecking channels 1..6 so only 1 channel is visible...');
+    const allCheckboxes = await page.$$('.vis-checkbox');
+    for (let i = 1; i < allCheckboxes.length; i++) {
+      if (await allCheckboxes[i].isChecked()) {
+        await allCheckboxes[i].click();
+        await sleep(50);
+      }
+    }
+    await sleep(300);
+
+    // Verify button is now enabled
+    isSpecDisabled = await specBtn.isDisabled();
+    console.log(`Spectrogram button disabled when only 1 channel visible: ${isSpecDisabled}`);
+    if (isSpecDisabled) {
+      throw new Error('Spectrogram button should be enabled when exactly 1 channel is visible');
+    }
+
+    // Click Spectrogram button to open spectrogram
+    console.log('Activating Spectrogram view...');
+    await specBtn.click();
+    await page.waitForSelector('.spectrogram-panel', { timeout: 5000 });
+    await sleep(800);
+
+    await page.screenshot({ path: '/tmp/edf_spectrogram_active.png' });
+    console.log('Captured /tmp/edf_spectrogram_active.png');
+
+    // Test changing frequency range dropdown to 100 Hz
+    await page.selectOption('.spectrogram-panel select.ctrl-select', '100');
+    await sleep(400);
+
+    // Hover over spectrogram to test crosshair / tooltip
+    const specCanvas = await page.$('.spectrogram-panel canvas');
+    const specBox = await specCanvas?.boundingBox();
+    if (specBox) {
+      await page.mouse.move(specBox.x + specBox.width / 2, specBox.y + specBox.height / 2);
+      await sleep(300);
+      await page.screenshot({ path: '/tmp/edf_spectrogram_hover.png' });
+      console.log('Captured /tmp/edf_spectrogram_hover.png');
+    }
+
+    // Toggle on a second channel: verify Spectrogram automatically closes
+    console.log('Turning on second channel: verify auto-close of Spectrogram...');
+    await allCheckboxes[1].click();
+    await sleep(400);
+    const specPanelAfter = await page.$('.spectrogram-panel');
+    if (specPanelAfter) {
+      throw new Error('Spectrogram panel should automatically close when a second channel is enabled');
+    }
+    console.log('Spectrogram auto-closed successfully when second channel was enabled.');
+
     console.log('\n--- ALL BROWSER SMOKE TEST ACTIONS PASSED SUCCESSFULLY ---');
   } finally {
     if (browser) {

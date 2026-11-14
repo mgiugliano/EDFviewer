@@ -7,6 +7,8 @@ import type {
   EdfEngineOptions,
   EdfHeaderInfo,
   ScanProgress,
+  SpectrogramRequest,
+  SpectrogramResult,
   ViewRequest,
   ViewResult,
   WasmModule,
@@ -216,6 +218,40 @@ export class EdfEngine {
     } finally {
       this.pendingViewRequests--;
     }
+  }
+
+  /**
+   * Computes spectrogram / STFT for a single channel over [t0, t1].
+   */
+  async getSpectrogram(req: SpectrogramRequest): Promise<SpectrogramResult> {
+    if (!this.header || !this.reader) {
+      throw new Error('EdfEngine is not open. Call open() first.');
+    }
+    const { t0, t1, channel, nFft = 512, hopSize = 128 } = req;
+    const sigA = this.header.signals[channel.a];
+    if (!sigA) {
+      throw new Error(`Signal index ${channel.a} not found`);
+    }
+    const fs = sigA.sample_rate;
+
+    // Decode raw samples for [t0, t1]
+    const rawResult = await this.renderRawChannel(channel, sigA, fs, t0, t1);
+    const rawSamples = rawResult.values;
+
+    if (!this.wasm.compute_spectrogram_json) {
+      throw new Error('compute_spectrogram_json is not available in WASM module');
+    }
+
+    const jsonStr = this.wasm.compute_spectrogram_json(
+      rawSamples,
+      fs,
+      nFft,
+      hopSize,
+      t0
+    );
+    const parsed = JSON.parse(jsonStr) as SpectrogramResult;
+    parsed.power_db = new Float32Array(parsed.power_db);
+    return parsed;
   }
 
   /**

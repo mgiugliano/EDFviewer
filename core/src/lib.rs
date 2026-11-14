@@ -6,6 +6,7 @@ pub mod decode;
 pub mod filter;
 pub mod header;
 pub mod reader;
+pub mod spectrogram;
 
 #[cfg(test)]
 #[allow(unused_imports)]

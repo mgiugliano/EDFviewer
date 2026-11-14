@@ -20,6 +20,7 @@
     { key: 'Shift + Click', desc: 'Annotate point marker directly on canvas' },
     { key: 'N / P', desc: 'Jump to Next / Previous annotation' },
     { key: 'A', desc: 'Toggle Annotations sidebar' },
+    { key: 'S', desc: 'Toggle Spectrogram view (when 1 channel is visible)' },
     { key: 'R', desc: 'Redraw / refresh display traces' },
     { key: 'G', desc: 'Go to specific timestamp or second' },
     { key: 'Space', desc: 'Toggle auto-scroll playback' },

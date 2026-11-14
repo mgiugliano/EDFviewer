@@ -2,6 +2,8 @@ import type {
   Annotation,
   EdfHeaderInfo,
   ScanProgress,
+  SpectrogramRequest,
+  SpectrogramResult,
   ViewRequest,
   ViewResult,
 } from './types.js';
@@ -38,9 +40,16 @@ export interface CloseRequestMsg {
   type: 'close';
 }
 
+export interface SpectrogramRequestMsg {
+  id: number;
+  type: 'spectrogram';
+  req: SpectrogramRequest;
+}
+
 export type WorkerInMessage =
   | OpenRequestMsg
   | ViewRequestMsg
+  | SpectrogramRequestMsg
   | PrefetchRequestMsg
   | ScanRequestMsg
   | CancelScanRequestMsg
@@ -58,6 +67,14 @@ export interface ViewResponseMsg {
   id: number;
   type: 'view_result';
   result?: ViewResult;
+  stale?: boolean;
+  error?: string;
+}
+
+export interface SpectrogramResponseMsg {
+  id: number;
+  type: 'spectrogram_result';
+  result?: SpectrogramResult;
   stale?: boolean;
   error?: string;
 }
@@ -87,6 +104,7 @@ export interface WorkerErrorMsg {
 export type WorkerOutMessage =
   | OpenResponseMsg
   | ViewResponseMsg
+  | SpectrogramResponseMsg
   | ProgressMsg
   | AnnotationsMsg
   | CloseResponseMsg

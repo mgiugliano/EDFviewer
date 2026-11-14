@@ -6,6 +6,7 @@
     EdfSignalInfo,
     FilterSpecJson,
     ScanProgress,
+    SpectrogramResult,
     ViewRequest,
   } from './lib/engine/types.js';
   import type { ChannelStyle, TraceData } from './lib/render/types.js';
@@ -29,6 +30,7 @@
   // Components
   import Toolbar from './lib/components/Toolbar.svelte';
   import Viewport from './lib/components/Viewport.svelte';
+  import SpectrogramView from './lib/components/SpectrogramView.svelte';
   import ChannelSidebar from './lib/components/ChannelSidebar.svelte';
   import AnnotationSidebar from './lib/components/AnnotationSidebar.svelte';
   import AnnotationPalette from './lib/components/AnnotationPalette.svelte';
@@ -86,6 +88,18 @@
   let channelStyles = $state<ChannelStyle[]>([]);
   let lineThickness = $state<number>(1.5);
   let viewportRef = $state<any>(null);
+
+  // Spectrogram State
+  let isSpectrogramMode = $state<boolean>(false);
+  let spectrogramResult = $state<SpectrogramResult | null>(null);
+  let isSpectrogramLoading = $state<boolean>(false);
+  let spectrogramNFft = $state<number>(512);
+
+  const visibleChannels = $derived(montage.channels.filter((c) => c.visible));
+  const canEnableSpectrogram = $derived(visibleChannels.length === 1);
+  const singleVisibleChannel = $derived(
+    visibleChannels.length === 1 ? visibleChannels[0] : null
+  );
 
   // Modals State
   let showFilterModal = $state<boolean>(false);
@@ -209,6 +223,65 @@
       autosaver.schedule(currentStorageKey, annotations);
     }
   });
+
+  // Automatically deactivate spectrogram if visible channel count is not exactly 1
+  $effect(() => {
+    if (isSpectrogramMode && visibleChannels.length !== 1) {
+      isSpectrogramMode = false;
+      spectrogramResult = null;
+    }
+  });
+
+  // Query Spectrogram when active and time window, channel, or FFT size changes
+  $effect(() => {
+    if (!edfClient || !header || !isSpectrogramMode || !singleVisibleChannel) {
+      return;
+    }
+    const curStart = tStart;
+    const curEnd = tStart + pageDurationSec;
+    const ch = singleVisibleChannel;
+    const n = spectrogramNFft;
+    fetchSpectrogram(curStart, curEnd, ch, n);
+  });
+
+  let spectrogramDebounceTimer: any = null;
+
+  async function fetchSpectrogram(
+    t0: number,
+    t1: number,
+    ch: typeof montage.channels[0],
+    nFft: number
+  ) {
+    if (!edfClient) return;
+    if (spectrogramDebounceTimer) clearTimeout(spectrogramDebounceTimer);
+
+    spectrogramDebounceTimer = setTimeout(async () => {
+      try {
+        isSpectrogramLoading = true;
+        const res = await edfClient!.getSpectrogram({
+          t0,
+          t1,
+          channel: {
+            a: ch.signalIndexA,
+            b: ch.signalIndexB,
+            filter: ch.filter,
+          },
+          nFft,
+          hopSize: Math.max(16, Math.floor(nFft / 4)),
+        });
+        spectrogramResult = res;
+      } catch (err) {
+        console.error('Failed to compute spectrogram:', err);
+      } finally {
+        isSpectrogramLoading = false;
+      }
+    }, 60);
+  }
+
+  function handleToggleSpectrogram() {
+    if (!canEnableSpectrogram) return;
+    isSpectrogramMode = !isSpectrogramMode;
+  }
 
   // Query View Data whenever tStart, pageDurationSec, montage channels, or file changes
   $effect(() => {
@@ -666,6 +739,12 @@
       return;
     }
 
+    if (e.key === 's' || e.key === 'S') {
+      e.preventDefault();
+      handleToggleSpectrogram();
+      return;
+    }
+
     if (e.key === 'n' || e.key === 'N') {
       e.preventDefault();
       handleJumpNextAnnotation();
@@ -764,6 +843,9 @@
     {isSidebarOpen}
     {isAnnotationSidebarOpen}
     annotationCount={annotations.length}
+    {isSpectrogramMode}
+    {canEnableSpectrogram}
+    onToggleSpectrogram={handleToggleSpectrogram}
     onOpenFile={handleOpenFile}
     onSelectPreset={handleSelectPreset}
     onResetDefaultMontage={handleResetDefaultMontage}
@@ -796,39 +878,57 @@
       onOpenAddDerivation={() => (showAddDerivationModal = true)}
     />
 
-    <!-- Trace Canvas Viewport -->
-    <main class="viewport-area">
-      <Viewport
-        bind:this={viewportRef}
-        hasFile={Boolean(header)}
-        {tStart}
-        {tEnd}
-        {duration}
-        traces={traceDataList}
-        styles={channelStyles}
-        {isDark}
-        {recordingStartDate}
-        {isLoading}
-        {lineThickness}
-        {needsZoomWarning}
-        {annotations}
-        {isAnnotateMode}
-        {activePreset}
-        selectedAnnotationId={editingAnnotation?.id ?? null}
-        onTimeChange={handleTimeChange}
-        onCreateAnnotation={handleCreateAnnotation}
-        onSelectAnnotation={(ann) => (editingAnnotation = ann)}
-        onEditAnnotation={(ann) => {
-          editingAnnotation = ann;
-          showEditAnnotationModal = true;
-        }}
-        onOpenFilePrompt={() => {
-          const input = document.querySelector<HTMLInputElement>(
-            'header input[type="file"]'
-          );
-          input?.click();
-        }}
-      />
+    <!-- Trace Canvas Viewport & Spectrogram -->
+    <main class="viewport-area {isSpectrogramMode ? 'split-view' : ''}">
+      <div class="trace-pane {isSpectrogramMode ? 'compressed' : ''}">
+        <Viewport
+          bind:this={viewportRef}
+          hasFile={Boolean(header)}
+          {tStart}
+          {tEnd}
+          {duration}
+          traces={traceDataList}
+          styles={channelStyles}
+          {isDark}
+          {recordingStartDate}
+          {isLoading}
+          {lineThickness}
+          {needsZoomWarning}
+          {annotations}
+          {isAnnotateMode}
+          {activePreset}
+          selectedAnnotationId={editingAnnotation?.id ?? null}
+          onTimeChange={handleTimeChange}
+          onCreateAnnotation={handleCreateAnnotation}
+          onSelectAnnotation={(ann) => (editingAnnotation = ann)}
+          onEditAnnotation={(ann) => {
+            editingAnnotation = ann;
+            showEditAnnotationModal = true;
+          }}
+          onOpenFilePrompt={() => {
+            const input = document.querySelector<HTMLInputElement>(
+              'header input[type="file"]'
+            );
+            input?.click();
+          }}
+        />
+      </div>
+
+      {#if isSpectrogramMode && singleVisibleChannel}
+        <div class="spectrogram-pane">
+          <SpectrogramView
+            spectrogram={spectrogramResult}
+            channelLabel={singleVisibleChannel.label}
+            {tStart}
+            {tEnd}
+            {isDark}
+            isLoading={isSpectrogramLoading}
+            nFft={spectrogramNFft}
+            onChangeNFft={(n) => (spectrogramNFft = n)}
+            onClose={() => (isSpectrogramMode = false)}
+          />
+        </div>
+      {/if}
     </main>
 
     <!-- Annotations Sidebar -->
@@ -973,6 +1073,32 @@
     height: 100%;
     position: relative;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .trace-pane {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .trace-pane.compressed {
+    flex: 0 0 35%;
+    height: 35%;
+    min-height: 150px;
+  }
+
+  .spectrogram-pane {
+    flex: 1;
+    min-height: 200px;
+    height: 65%;
+    width: 100%;
+    position: relative;
   }
 
   .bottom-bar {

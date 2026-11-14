@@ -237,6 +237,41 @@ self.onmessage = async (e: MessageEvent<WorkerInMessage>) => {
       break;
     }
 
+    case 'spectrogram': {
+      const reqId = msg.id;
+      if (!engine) {
+        const res: WorkerOutMessage = {
+          id: reqId,
+          type: 'spectrogram_result',
+          error: 'No EDF file opened',
+        };
+        self.postMessage(res);
+        return;
+      }
+
+      try {
+        const result = await engine.getSpectrogram(msg.req);
+        const transferables: ArrayBuffer[] = [];
+        if (result.power_db instanceof Float32Array && result.power_db.buffer instanceof ArrayBuffer) {
+          transferables.push(result.power_db.buffer);
+        }
+        const res: WorkerOutMessage = {
+          id: reqId,
+          type: 'spectrogram_result',
+          result,
+        };
+        self.postMessage(res, { transfer: transferables });
+      } catch (err) {
+        const res: WorkerOutMessage = {
+          id: reqId,
+          type: 'spectrogram_result',
+          error: String(err),
+        };
+        self.postMessage(res);
+      }
+      break;
+    }
+
     case 'prefetch': {
       if (engine) {
         engine.prefetch(msg.t0, msg.t1).catch(() => {});

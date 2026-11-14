@@ -156,6 +156,41 @@ export interface WasmModule {
   ) => string;
   filter_signal?: (input: Float32Array, fs: number, specJson: string) => Float32Array;
   filter_suggested_pad?: (fs: number, specJson: string) => number;
+  compute_spectrogram_json?: (
+    signal: Float32Array,
+    sampleRate: number,
+    nFft: number,
+    hopSize: number,
+    tStart: number
+  ) => string;
+}
+
+/**
+ * Spectrogram request parameters.
+ */
+export interface SpectrogramRequest {
+  t0: number;
+  t1: number;
+  channel: ChannelReq;
+  nFft?: number;
+  hopSize?: number;
+}
+
+/**
+ * Result of STFT computation.
+ */
+export interface SpectrogramResult {
+  n_frames: number;
+  n_freqs: number;
+  sample_rate: number;
+  t_start: number;
+  t_end: number;
+  freq_step: number;
+  max_freq: number;
+  min_db: number;
+  max_db: number;
+  time_axis: number[];
+  power_db: Float32Array | number[];
 }
 
 /**

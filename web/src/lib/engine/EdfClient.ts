@@ -2,6 +2,8 @@ import type {
   Annotation,
   EdfHeaderInfo,
   ScanProgress,
+  SpectrogramRequest,
+  SpectrogramResult,
   ViewRequest,
   ViewResult,
 } from './types.js';
@@ -11,6 +13,7 @@ import type {
   PrefetchRequestMsg,
   ScanRequestMsg,
   CancelScanRequestMsg,
+  SpectrogramRequestMsg,
   ViewRequestMsg,
   WorkerOutMessage,
 } from './protocol.js';
@@ -69,6 +72,19 @@ export class EdfClient {
           if (msg.stale) {
             p.resolve(null);
           } else if (msg.error) {
+            p.reject(new Error(msg.error));
+          } else {
+            p.resolve(msg.result!);
+          }
+        }
+        break;
+      }
+
+      case 'spectrogram_result': {
+        const p = this.pending.get(msg.id);
+        if (p) {
+          this.pending.delete(msg.id);
+          if (msg.error) {
             p.reject(new Error(msg.error));
           } else {
             p.resolve(msg.result!);
@@ -143,6 +159,20 @@ export class EdfClient {
     const msg: ViewRequestMsg = { id, type: 'view', req: plainReq };
 
     return new Promise<ViewResult | null>((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      this.worker.postMessage(msg);
+    });
+  }
+
+  /**
+   * Requests spectrogram STFT for a single channel.
+   */
+  async getSpectrogram(req: SpectrogramRequest): Promise<SpectrogramResult> {
+    const id = this.nextId++;
+    const plainReq: SpectrogramRequest = JSON.parse(JSON.stringify(req));
+    const msg: SpectrogramRequestMsg = { id, type: 'spectrogram', req: plainReq };
+
+    return new Promise<SpectrogramResult>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       this.worker.postMessage(msg);
     });
