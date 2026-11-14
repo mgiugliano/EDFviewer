@@ -35,8 +35,8 @@
     if (isOpen && annotation) {
       label = annotation.label || 'Annotation';
       color = annotation.color || getLabelColor(label);
-      onset = parseFloat(annotation.onset.toFixed(3));
-      duration = parseFloat(annotation.duration.toFixed(3));
+      onset = Math.round(annotation.onset * 100) / 100;
+      duration = Math.round(annotation.duration * 100) / 100;
       channel = annotation.channel || 'ALL';
       note = annotation.note || '';
       isPoint = duration === 0;

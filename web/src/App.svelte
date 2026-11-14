@@ -630,10 +630,13 @@
       ? crypto.randomUUID()
       : 'ann_' + Math.random().toString(36).slice(2, 10) + '_' + Date.now().toString(36);
 
+    const roundedOnset = Math.round(annData.onset * 100) / 100;
+    const roundedDur = Math.round(annData.duration * 100) / 100;
+
     const newAnn: ViewerAnnotation = {
       id,
-      onset: annData.onset,
-      duration: annData.duration,
+      onset: roundedOnset,
+      duration: roundedDur,
       label: annData.label,
       channel: annData.channel,
       color: annData.color,
@@ -642,7 +645,6 @@
 
     annotations = [...annotations, newAnn].sort((a, b) => a.onset - b.onset);
     editingAnnotation = newAnn;
-    showEditAnnotationModal = true;
   }
 
   function handleSaveAnnotation(updated: ViewerAnnotation) {
