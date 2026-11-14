@@ -1,0 +1,1 @@
+//! Signal sample decoding routines.

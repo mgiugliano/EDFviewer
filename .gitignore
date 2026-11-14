@@ -1,0 +1,9 @@
+target/
+node_modules/
+web/dist/
+web/src/wasm/pkg/
+test_data/
+*.edf
+.DS_Store
+__pycache__/
+.venv/
