@@ -707,6 +707,11 @@
   // -------------------------------------------------------------------------
 
   function handleGlobalKeydown(e: KeyboardEvent) {
+    // Never intercept browser or OS modifier shortcuts (e.g. Cmd+R / Ctrl+R to reload)
+    if (e.metaKey || e.ctrlKey) {
+      return;
+    }
+
     // If inside an input or select, skip global hotkeys
     const target = e.target as HTMLElement;
     if (
