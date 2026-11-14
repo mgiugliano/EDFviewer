@@ -35,8 +35,8 @@
     if (isOpen && annotation) {
       label = annotation.label || 'Annotation';
       color = annotation.color || getLabelColor(label);
-      onset = parseFloat(annotation.onset.toFixed(4));
-      duration = parseFloat(annotation.duration.toFixed(4));
+      onset = parseFloat(annotation.onset.toFixed(3));
+      duration = parseFloat(annotation.duration.toFixed(3));
       channel = annotation.channel || 'ALL';
       note = annotation.note || '';
       isPoint = duration === 0;
@@ -52,12 +52,12 @@
     e.preventDefault();
     if (!annotation) return;
 
-    const finalDur = isPoint ? 0 : Math.max(0, duration);
+    const finalDur = isPoint ? 0 : Math.max(0, Math.round(duration * 1000) / 1000);
     const updated: ViewerAnnotation = {
       ...annotation,
       label: label.trim() || 'Annotation',
       color,
-      onset: Math.max(0, onset),
+      onset: Math.max(0, Math.round(onset * 1000) / 1000),
       duration: finalDur,
       channel: channel === 'ALL' ? undefined : channel,
       note: note.trim() || undefined,
@@ -142,7 +142,7 @@
             <input
               id="ann-onset"
               type="number"
-              step="0.001"
+              step="any"
               min="0"
               class="form-input"
               bind:value={onset}
@@ -156,7 +156,7 @@
               <input
                 id="ann-duration"
                 type="number"
-                step="0.001"
+                step="any"
                 min="0"
                 class="form-input"
                 bind:value={duration}

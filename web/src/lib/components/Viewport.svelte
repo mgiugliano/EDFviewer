@@ -449,8 +449,8 @@
 
       if (onCreateAnnotation) {
         onCreateAnnotation({
-          onset: parseFloat(Math.max(0, finalOnset).toFixed(4)),
-          duration: parseFloat(Math.max(0, finalDur).toFixed(4)),
+          onset: parseFloat(Math.max(0, finalOnset).toFixed(3)),
+          duration: parseFloat(Math.max(0, finalDur).toFixed(3)),
           label: activePreset.label,
           channel: clickedChannel,
           color: activePreset.color,

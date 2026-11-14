@@ -209,7 +209,7 @@
               <input
                 id="custom-hp"
                 type="number"
-                step="0.1"
+                step="any"
                 min="0.01"
                 max="500"
                 bind:value={hpCustom}
@@ -249,7 +249,7 @@
               <input
                 id="custom-lp"
                 type="number"
-                step="1"
+                step="any"
                 min="1"
                 max="5000"
                 bind:value={lpCustom}
@@ -289,7 +289,7 @@
               <input
                 id="custom-notch"
                 type="number"
-                step="1"
+                step="any"
                 min="1"
                 max="1000"
                 bind:value={notchCustom}

@@ -151,6 +151,32 @@ async function main() {
     await page.screenshot({ path: annotScreenshotPath });
     console.log(`Annotations screenshot saved to ${annotScreenshotPath} (${fs.statSync(annotScreenshotPath).size} bytes)`);
 
+    // 7b. Test editing annotation with decimal digits (verifying step="any" and no browser validation blockage)
+    console.log('Testing editing annotation with arbitrary decimal digits...');
+    const editBtn = await page.$('.card-btn[title="Edit Annotation"]');
+    if (editBtn) {
+      await editBtn.click();
+      await page.waitForSelector('.modal-card', { timeout: 3000 });
+      await sleep(300);
+
+      const onsetInput = await page.$('#ann-onset');
+      const durInput = await page.$('#ann-duration');
+
+      // Fill arbitrary decimal digits that previously triggered step-mismatch errors
+      await onsetInput?.fill('3.14159');
+      await durInput?.fill('2.71828');
+
+      const saveBtn = await page.$('.modal-card button[type="submit"]');
+      await saveBtn?.click();
+      await sleep(400);
+
+      const modalStillOpen = await page.$('.modal-card');
+      if (modalStillOpen) {
+        throw new Error('Edit annotation modal failed to save with decimal digits');
+      }
+      console.log('Annotation with arbitrary decimals saved cleanly without validation errors.');
+    }
+
     // 8. Test toggling a channel in the left sidebar
     console.log('Testing toggling a channel in the left sidebar...');
     const firstCheckbox = await page.$('.vis-checkbox');
