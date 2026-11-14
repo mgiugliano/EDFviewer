@@ -5,6 +5,7 @@ pub mod decimate;
 pub mod decode;
 pub mod filter;
 pub mod header;
+pub mod reader;
 
 #[cfg(test)]
 #[allow(unused_imports)]
