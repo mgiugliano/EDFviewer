@@ -33,6 +33,7 @@ export interface RenderTheme {
 
 export interface OverlayOptions {
   channels?: { label: string; color?: string; scale?: number; unit?: string }[];
+  gutterLeftPx?: number;               // dedicated left margin for Y-axis labels & calibration ticks
   recordingStartDate?: Date;           // optional absolute clock start
   showAbsoluteTime?: boolean;          // if true and recordingStartDate provided, display clock
   gridColor?: string;                  // default e.g. 'rgba(0, 0, 0, 0.08)'

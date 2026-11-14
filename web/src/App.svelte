@@ -225,15 +225,25 @@
       return;
     }
 
+    // Add margin buffer on both sides so horizontal scrolling / dragging shows continuous data
+    const dt = Math.max(0.1, t1 - t0);
+    const margin = Math.min(60, Math.max(1, dt * 0.75));
+    const fetchT0 = Math.max(0, t0 - margin);
+    const fetchT1 = Math.min(header.duration_seconds, t1 + margin);
+    const actualDt = Math.max(0.1, fetchT1 - fetchT0);
+    const baseW = Math.max(
+      800,
+      window.innerWidth -
+        (isSidebarOpen ? 320 : 40) -
+        (isAnnotationSidebarOpen ? 320 : 0) -
+        75
+    );
+    const fetchWidthPx = Math.round(baseW * (actualDt / dt));
+
     const req: ViewRequest = {
-      t0,
-      t1,
-      widthPx: Math.max(
-        800,
-        window.innerWidth -
-          (isSidebarOpen ? 320 : 40) -
-          (isAnnotationSidebarOpen ? 320 : 0)
-      ),
+      t0: fetchT0,
+      t1: fetchT1,
+      widthPx: Math.max(baseW, fetchWidthPx),
       channels: visibleChannels.map((c) => ({
         a: c.signalIndexA,
         b: c.signalIndexB,

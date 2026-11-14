@@ -138,7 +138,9 @@ export class EdfClient {
    */
   async view(req: ViewRequest): Promise<ViewResult | null> {
     const id = this.nextId++;
-    const msg: ViewRequestMsg = { id, type: 'view', req };
+    // Strip any Svelte reactive proxies so structured clone in postMessage never throws DataCloneError
+    const plainReq: ViewRequest = JSON.parse(JSON.stringify(req));
+    const msg: ViewRequestMsg = { id, type: 'view', req: plainReq };
 
     return new Promise<ViewResult | null>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });

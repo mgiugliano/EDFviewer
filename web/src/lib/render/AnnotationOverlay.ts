@@ -7,6 +7,7 @@ export interface AnnotationDrawOptions {
   selectedId?: string | null;
   creatingRange?: { t0: number; t1: number; label: string; color: string } | null;
   timeAxisHeightPx?: number;
+  gutterLeftPx?: number;
 }
 
 /**
@@ -80,6 +81,8 @@ export function drawAnnotations(
   const { widthPx: W, heightPx: H, tStart, tEnd, dpr } = vp;
   if (W <= 0 || H <= 0) return;
 
+  const gutterLeft = Math.max(0, opts.gutterLeftPx ?? 0);
+  const plotWidth = Math.max(1, W - gutterLeft);
   const dt = Math.max(1e-9, tEnd - tStart);
   const timeAxisHeight = opts.timeAxisHeightPx ?? 24;
   const traceHeight = H - timeAxisHeight;
@@ -117,9 +120,9 @@ export function drawAnnotations(
       // -----------------------------------------------------------------------
       // Duration Event: Vertical Shaded Band
       // -----------------------------------------------------------------------
-      const x0 = ((ann.onset - tStart) / dt) * W;
-      const x1 = ((annEnd - tStart) / dt) * W;
-      const left = Math.max(0, Math.min(x0, x1));
+      const x0 = gutterLeft + ((ann.onset - tStart) / dt) * plotWidth;
+      const x1 = gutterLeft + ((annEnd - tStart) / dt) * plotWidth;
+      const left = Math.max(gutterLeft, Math.min(x0, x1));
       const right = Math.min(W, Math.max(x0, x1));
       const bandW = Math.max(2, right - left);
 
@@ -133,12 +136,12 @@ export function drawAnnotations(
       ctx.lineWidth = isSelected || isHovered ? 2.5 : 1.5;
       ctx.beginPath();
       // Left border
-      if (x0 >= 0 && x0 <= W) {
+      if (x0 >= gutterLeft && x0 <= W) {
         ctx.moveTo(Math.round(x0) + 0.5, yTop);
         ctx.lineTo(Math.round(x0) + 0.5, yBottom);
       }
       // Right border
-      if (x1 >= 0 && x1 <= W) {
+      if (x1 >= gutterLeft && x1 <= W) {
         ctx.moveTo(Math.round(x1) + 0.5, yTop);
         ctx.lineTo(Math.round(x1) + 0.5, yBottom);
       }
@@ -155,7 +158,7 @@ export function drawAnnotations(
       const chipW = textMetrics.width + 10;
       const chipH = 18;
       // Position chip at the top of the band
-      const chipX = Math.max(2, Math.min(W - chipW - 2, left));
+      const chipX = Math.max(gutterLeft + 2, Math.min(W - chipW - 2, left));
       const chipY = Math.max(2, yTop + 3);
 
       // Chip Background Pill
@@ -182,8 +185,8 @@ export function drawAnnotations(
       // -----------------------------------------------------------------------
       // Point Marker: Vertical Line with Pin Tag
       // -----------------------------------------------------------------------
-      const x = ((ann.onset - tStart) / dt) * W;
-      if (x < -20 || x > W + 20) continue;
+      const x = gutterLeft + ((ann.onset - tStart) / dt) * plotWidth;
+      if (x < gutterLeft - 20 || x > W + 20) continue;
 
       ctx.strokeStyle = color;
       ctx.lineWidth = isSelected || isHovered ? 2.5 : 1.5;
@@ -204,7 +207,7 @@ export function drawAnnotations(
       const textMetrics = ctx.measureText(tagText);
       const tagW = textMetrics.width + 10;
       const tagH = 18;
-      const tagX = Math.max(2, Math.min(W - tagW - 2, x - tagW / 2));
+      const tagX = Math.max(gutterLeft + 2, Math.min(W - tagW - 2, x - tagW / 2));
       const tagY = Math.max(2, yTop + 3);
 
       // Pill Background
@@ -235,9 +238,9 @@ export function drawAnnotations(
     const startT = Math.min(t0, t1);
     const endT = Math.max(t0, t1);
 
-    const x0 = ((startT - tStart) / dt) * W;
-    const x1 = ((endT - tStart) / dt) * W;
-    const left = Math.max(0, Math.min(x0, x1));
+    const x0 = gutterLeft + ((startT - tStart) / dt) * plotWidth;
+    const x1 = gutterLeft + ((endT - tStart) / dt) * plotWidth;
+    const left = Math.max(gutterLeft, Math.min(x0, x1));
     const right = Math.min(W, Math.max(x0, x1));
     const bandW = Math.max(2, right - left);
 
@@ -261,7 +264,7 @@ export function drawAnnotations(
     const textMetrics = ctx.measureText(chipText);
     const chipW = textMetrics.width + 12;
     const chipH = 20;
-    const chipX = Math.max(4, Math.min(W - chipW - 4, left));
+    const chipX = Math.max(gutterLeft + 4, Math.min(W - chipW - 4, left));
     const chipY = 6;
 
     ctx.fillStyle = color;
@@ -292,13 +295,15 @@ export function hitTestAnnotation(
   vp: Viewport,
   annotations: ViewerAnnotation[],
   channels: { label: string }[] = [],
-  timeAxisHeightPx: number = 24
+  timeAxisHeightPx: number = 24,
+  gutterLeftPx: number = 0
 ): ViewerAnnotation | null {
   const { widthPx: W, heightPx: H, tStart, tEnd } = vp;
   const traceHeight = H - timeAxisHeightPx;
-  if (mouseY > traceHeight) return null;
+  if (mouseY > traceHeight || mouseX < gutterLeftPx) return null;
 
   const dt = Math.max(1e-9, tEnd - tStart);
+  const plotWidth = Math.max(1, W - gutterLeftPx);
 
   // Check in reverse order so topmost rendered annotation is hit first
   for (let i = annotations.length - 1; i >= 0; i--) {
@@ -316,8 +321,8 @@ export function hitTestAnnotation(
     }
 
     if (isDuration) {
-      const x0 = ((ann.onset - tStart) / dt) * W;
-      const x1 = ((annEnd - tStart) / dt) * W;
+      const x0 = gutterLeftPx + ((ann.onset - tStart) / dt) * plotWidth;
+      const x1 = gutterLeftPx + ((annEnd - tStart) / dt) * plotWidth;
       const left = Math.min(x0, x1) - 4;
       const right = Math.max(x0, x1) + 4;
 
@@ -326,7 +331,7 @@ export function hitTestAnnotation(
       }
     } else {
       // Point marker hit detection (within 8px tolerance)
-      const x = ((ann.onset - tStart) / dt) * W;
+      const x = gutterLeftPx + ((ann.onset - tStart) / dt) * plotWidth;
       if (Math.abs(mouseX - x) <= 8) {
         return ann;
       }

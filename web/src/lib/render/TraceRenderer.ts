@@ -284,13 +284,21 @@ export class TraceRenderer {
    * Render traces in lanes of equal height.
    * Panning and zooming within loaded data only updates uniforms.
    */
-  public render(vp: Viewport): void {
+  public render(
+    vp: Viewport,
+    opts?: { gutterLeftPx?: number; timeAxisHeightPx?: number }
+  ): void {
     if (this.isLost || !this.gl || !this.program) return;
     const gl = this.gl;
 
     this.resize(vp.widthPx, vp.heightPx, vp.dpr);
 
-    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    const gutterLeft = Math.round((opts?.gutterLeftPx ?? 0) * vp.dpr);
+    const timeAxisH = Math.round((opts?.timeAxisHeightPx ?? 0) * vp.dpr);
+    const traceW = Math.max(1, this.canvas.width - gutterLeft);
+    const traceH = Math.max(1, this.canvas.height - timeAxisH);
+
+    gl.viewport(gutterLeft, timeAxisH, traceW, traceH);
     gl.clearColor(this.bgColor[0], this.bgColor[1], this.bgColor[2], this.bgColor[3]);
     gl.clear(gl.COLOR_BUFFER_BIT);
 

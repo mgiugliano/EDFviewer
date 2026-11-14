@@ -166,6 +166,49 @@ async function main() {
     if (initialChecked === afterChecked) {
       throw new Error('Checkbox state did not toggle');
     }
+    // Toggle it back on
+    await firstCheckbox.click();
+    await sleep(300);
+
+    // 9. Test horizontal zooming (Window: 1s, 60s)
+    console.log('Testing horizontal zooming...');
+    await page.selectOption('select.duration-select', '1');
+    await sleep(400);
+    await page.screenshot({ path: '/tmp/edf_zoom_1s.png' });
+    console.log('Captured /tmp/edf_zoom_1s.png');
+
+    await page.selectOption('select.duration-select', '60');
+    await sleep(400);
+    await page.screenshot({ path: '/tmp/edf_zoom_60s.png' });
+    console.log('Captured /tmp/edf_zoom_60s.png');
+
+    // 10. Test applying a 50Hz notch filter
+    console.log('Testing filter configuration (50 Hz Notch)...');
+    const filterBtn = await page.$('button.filter-icon-btn');
+    if (filterBtn) {
+      await filterBtn.click();
+      await sleep(300);
+      await page.click('button.opt-btn:has-text("50 Hz")');
+      await sleep(200);
+      await page.click('button:has-text("Apply to Channel")');
+      await sleep(600);
+      await page.screenshot({ path: '/tmp/edf_filtered_view.png' });
+      console.log('Captured /tmp/edf_filtered_view.png');
+    }
+
+    // 11. Test smooth horizontal panning/dragging
+    console.log('Testing horizontal drag/pan...');
+    const viewportEl = await page.$('.viewport-container');
+    const box = await viewportEl?.boundingBox();
+    if (box) {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width / 2 - 200, box.y + box.height / 2, { steps: 8 });
+      await page.mouse.up();
+      await sleep(500);
+      await page.screenshot({ path: '/tmp/edf_filtered_panned.png' });
+      console.log('Captured /tmp/edf_filtered_panned.png');
+    }
 
     console.log('\n--- ALL BROWSER SMOKE TEST ACTIONS PASSED SUCCESSFULLY ---');
   } finally {

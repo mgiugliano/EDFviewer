@@ -213,6 +213,9 @@
     animFrameId = requestAnimationFrame(draw);
   }
 
+  const GUTTER_LEFT = 75;
+  const TIME_AXIS_HEIGHT = 24;
+
   function draw() {
     animFrameId = 0;
     if (!containerEl || !renderer || !overlayCtx) return;
@@ -232,12 +235,14 @@
       dpr,
     };
 
-    // 1. WebGL trace draw
-    renderer.render(vp);
+    // 1. WebGL trace draw (rendered inside plot rectangle excluding gutter & time axis)
+    renderer.render(vp, { gutterLeftPx: GUTTER_LEFT, timeAxisHeightPx: TIME_AXIS_HEIGHT });
 
-    // 2. 2D overlay draw (grid, time axis, lane separators, channel labels)
+    // 2. 2D overlay draw (grid, time axis, lane separators, dedicated Y-axis channel labels)
     drawOverlay(overlayCtx, vp, {
       channels: styles,
+      gutterLeftPx: GUTTER_LEFT,
+      timeAxisHeightPx: TIME_AXIS_HEIGHT,
       gridColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
       gridSubColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.03)',
       laneSeparatorColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.10)',
@@ -245,7 +250,7 @@
       badgeBgColor: isDark ? 'rgba(39, 39, 42, 0.92)' : 'rgba(255, 255, 255, 0.92)',
       timeAxisColor: isDark ? '#d4d4d8' : '#52525b',
       recordingStartDate,
-      showAbsoluteTime: Boolean(recordingStartDate),
+      showAbsoluteTime: false,
       showScaleBars: true,
       showChannelLabels: true,
       showGrid: true,
@@ -256,10 +261,11 @@
     // 3. Annotations draw (bands, point markers, chips, active creation preview)
     drawAnnotations(overlayCtx, vp, annotations, {
       channels: styles,
+      gutterLeftPx: GUTTER_LEFT,
+      timeAxisHeightPx: TIME_AXIS_HEIGHT,
       hoveredId: hoveredAnnotation?.id,
       selectedId: selectedAnnotationId,
       creatingRange,
-      timeAxisHeightPx: 24,
     });
   }
 
@@ -267,7 +273,9 @@
   function handlePointerDown(e: PointerEvent) {
     if (!hasFile || !containerEl) return;
     const rect = containerEl.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
+    const plotWidth = Math.max(1, rect.width - GUTTER_LEFT);
+    const mouseX = Math.max(0, Math.min(plotWidth, e.clientX - rect.left - GUTTER_LEFT));
+    const rawX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
     const vp: RenderViewport = {
@@ -281,7 +289,7 @@
     const isInAnnotateMode = isAnnotateMode || isShiftOrAltPressed || e.shiftKey || e.altKey;
 
     // Check if clicking directly on an existing annotation
-    const hit = hitTestAnnotation(mouseX, mouseY, vp, annotations, styles);
+    const hit = hitTestAnnotation(rawX, mouseY, vp, annotations, styles, TIME_AXIS_HEIGHT, GUTTER_LEFT);
     if (hit && !isInAnnotateMode) {
       if (onSelectAnnotation) onSelectAnnotation(hit);
       if (onEditAnnotation) onEditAnnotation(hit);
@@ -295,7 +303,7 @@
       createStartX = mouseX;
       createStartY = mouseY;
       const dt = localT1 - localT0;
-      createStartT = localT0 + (mouseX / rect.width) * dt;
+      createStartT = localT0 + (mouseX / plotWidth) * dt;
       creatingRange = {
         t0: Math.max(0, Math.min(duration || 10, createStartT)),
         t1: Math.max(0, Math.min(duration || 10, createStartT)),
@@ -322,13 +330,15 @@
   function handlePointerMove(e: PointerEvent) {
     if (!hasFile || !containerEl) return;
     const rect = containerEl.getBoundingClientRect();
-    const mouseX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const plotWidth = Math.max(1, rect.width - GUTTER_LEFT);
+    const mouseX = Math.max(0, Math.min(plotWidth, e.clientX - rect.left - GUTTER_LEFT));
+    const rawX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
     // 1. Annotation creation drag
     if (isCreatingAnnotation) {
       const dt = localT1 - localT0;
-      const curT = localT0 + (mouseX / rect.width) * dt;
+      const curT = localT0 + (mouseX / plotWidth) * dt;
       creatingRange = {
         t0: Math.max(0, Math.min(duration || 10, createStartT)),
         t1: Math.max(0, Math.min(duration || 10, curT)),
@@ -343,7 +353,7 @@
     if (isDragging) {
       const dx = e.clientX - dragStartX;
       const dt = dragStartT1 - dragStartT0;
-      const timeDelta = (dx / rect.width) * dt;
+      const timeDelta = (dx / plotWidth) * dt;
 
       let newT0 = dragStartT0 - timeDelta;
       let newT1 = dragStartT1 - timeDelta;
@@ -374,14 +384,14 @@
       dpr: window.devicePixelRatio || 1,
     };
 
-    const hit = hitTestAnnotation(mouseX, mouseY, vp, annotations, styles);
+    const hit = hitTestAnnotation(rawX, mouseY, vp, annotations, styles, TIME_AXIS_HEIGHT, GUTTER_LEFT);
     if (hit !== hoveredAnnotation) {
       hoveredAnnotation = hit;
       requestDraw();
     }
 
     if (hit) {
-      tooltipPos = { x: mouseX, y: mouseY };
+      tooltipPos = { x: rawX, y: mouseY };
     } else {
       tooltipPos = null;
     }
@@ -399,9 +409,10 @@
       isCreatingAnnotation = false;
 
       const rect = containerEl.getBoundingClientRect();
-      const mouseX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+      const plotWidth = Math.max(1, rect.width - GUTTER_LEFT);
+      const mouseX = Math.max(0, Math.min(plotWidth, e.clientX - rect.left - GUTTER_LEFT));
       const dt = localT1 - localT0;
-      const curT = localT0 + (mouseX / rect.width) * dt;
+      const curT = localT0 + (mouseX / plotWidth) * dt;
 
       const dxPx = Math.abs(mouseX - createStartX);
       let finalOnset = Math.min(createStartT, curT);
@@ -415,7 +426,7 @@
 
       // Check which channel lane was targeted
       let clickedChannel: string | undefined = undefined;
-      const traceHeight = rect.height - 24;
+      const traceHeight = rect.height - TIME_AXIS_HEIGHT;
       if (styles.length > 0 && createStartY <= traceHeight && createStartY >= 0) {
         const laneH = traceHeight / styles.length;
         const laneIdx = Math.floor(createStartY / laneH);
@@ -458,14 +469,27 @@
     }
   }
 
-  // Wheel zoom centered at cursor
+  // Wheel zoom centered at cursor OR horizontal trackpad swipe
   function handleWheel(e: WheelEvent) {
     if (!hasFile || !containerEl) return;
     e.preventDefault();
 
+    // Horizontal scroll (trackpad deltaX or Shift+wheel)
+    const isHorizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey;
+    if (isHorizontal) {
+      const delta = e.shiftKey ? e.deltaY : e.deltaX;
+      const currentDt = tEnd - tStart;
+      const shiftSeconds = (delta / 400) * currentDt;
+      let newT0 = Math.max(0, Math.min(Math.max(0, duration - currentDt), tStart + shiftSeconds));
+      let newT1 = newT0 + currentDt;
+      onTimeChange(newT0, newT1);
+      return;
+    }
+
     const rect = containerEl.getBoundingClientRect();
-    const mouseX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-    const cursorFraction = mouseX / rect.width;
+    const plotWidth = Math.max(1, rect.width - GUTTER_LEFT);
+    const mouseX = Math.max(0, Math.min(plotWidth, e.clientX - rect.left - GUTTER_LEFT));
+    const cursorFraction = mouseX / plotWidth;
 
     const currentDt = tEnd - tStart;
     const tMouse = tStart + cursorFraction * currentDt;

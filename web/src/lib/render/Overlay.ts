@@ -1,7 +1,7 @@
 import type { OverlayOptions, Viewport } from './types.js';
 
 const NICE_STEPS = [
-  0.001, 0.002, 0.005,
+  0.0005, 0.001, 0.002, 0.005,
   0.01, 0.02, 0.05,
   0.1, 0.2, 0.5,
   1, 2, 5, 10, 15, 30,
@@ -12,7 +12,7 @@ const NICE_STEPS = [
 /**
  * Calculates a visually appealing time interval for grid lines based on zoom level.
  */
-export function getNiceTimeStep(dt: number, widthPx: number, minPixelDistance: number = 90): number {
+export function getNiceTimeStep(dt: number, widthPx: number, minPixelDistance: number = 120): number {
   if (widthPx <= 0 || dt <= 0) return 1;
   const targetStep = (dt / widthPx) * minPixelDistance;
 
@@ -42,13 +42,14 @@ function pad3(n: number): string {
 }
 
 /**
- * Format relative time as HH:MM:SS(.mmm) and optional absolute clock.
+ * Format time cleanly as HH:MM:SS or MM:SS(.mmm).
+ * Clean, standard format with NO confusing parentheses or duplicate clocks.
  */
 export function formatTimeLabel(
   seconds: number,
   step: number,
-  recordingStartDate?: Date,
-  showAbsolute: boolean = false
+  _recordingStartDate?: Date,
+  _showAbsolute: boolean = false
 ): string {
   const isNegative = seconds < 0;
   const absSec = Math.abs(seconds);
@@ -64,24 +65,19 @@ export function formatTimeLabel(
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
 
-  let rel = `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+  let rel = '';
+  if (h > 0 || step >= 3600) {
+    rel = `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+  } else {
+    rel = `${pad2(m)}:${pad2(s)}`;
+  }
+
   if (step < 1.0) {
     rel += `.${pad3(ms)}`;
   }
+
   if (isNegative) {
     rel = '-' + rel;
-  }
-
-  if (recordingStartDate && showAbsolute) {
-    const clock = new Date(recordingStartDate.getTime() + seconds * 1000);
-    const ch = pad2(clock.getHours());
-    const cm = pad2(clock.getMinutes());
-    const cs = pad2(clock.getSeconds());
-    let absStr = `${ch}:${cm}:${cs}`;
-    if (step < 1.0) {
-      absStr += `.${pad3(clock.getMilliseconds())}`;
-    }
-    return `${rel} (${absStr})`;
   }
 
   return rel;
@@ -89,6 +85,9 @@ export function formatTimeLabel(
 
 /**
  * Pure function to draw the 2D overlay layer above the WebGL traces.
+ * Features:
+ * - Dedicated Y-axis gutter on the left with channel labels and +/0/- calibration voltage scale.
+ * - Non-overlapping adaptive X-axis time ticks with collision avoidance.
  */
 export function drawOverlay(
   ctx: CanvasRenderingContext2D,
@@ -98,10 +97,12 @@ export function drawOverlay(
   const { widthPx: W, heightPx: H, dpr } = vp;
   if (W <= 0 || H <= 0) return;
 
+  const gutterLeft = Math.max(0, opts.gutterLeftPx ?? 75);
   const dt = Math.max(1e-9, vp.tEnd - vp.tStart);
   const showTimeAxis = opts.showTimeAxis !== false;
   const timeAxisHeight = showTimeAxis ? (opts.timeAxisHeightPx ?? 24) : 0;
   const traceHeight = H - timeAxisHeight;
+  const plotWidth = Math.max(1, W - gutterLeft);
 
   const fontFamily = opts.fontFamily ?? 'system-ui, -apple-system, sans-serif';
   const fontSize = opts.fontSizePx ?? 11;
@@ -120,12 +121,11 @@ export function drawOverlay(
   // Scale coordinate space to CSS pixels
   ctx.scale(dpr, dpr);
 
-  // 1. Time Grid Lines
-  const step = getNiceTimeStep(dt, W, 100);
+  // 1. Time Grid Lines across Plot Area
+  const step = getNiceTimeStep(dt, plotWidth, 120);
   const firstTick = Math.ceil(vp.tStart / step) * step;
 
   if (opts.showGrid !== false) {
-    // Minor subdivisions if step allows (e.g. 5 sub-steps for decimal or 4 for 60s/15m)
     let subDivisions = 5;
     if (step === 60 || step === 300 || step === 900 || step === 3600) {
       subDivisions = 4;
@@ -140,8 +140,8 @@ export function drawOverlay(
     ctx.strokeStyle = gridSubColor;
     ctx.lineWidth = 1;
     for (let t = subFirstTick; t <= vp.tEnd + 1e-9; t += subStep) {
-      const x = ((t - vp.tStart) / dt) * W;
-      if (x < 0 || x > W) continue;
+      const x = gutterLeft + ((t - vp.tStart) / dt) * plotWidth;
+      if (x < gutterLeft || x > W) continue;
       ctx.moveTo(Math.round(x) + 0.5, 0);
       ctx.lineTo(Math.round(x) + 0.5, traceHeight);
     }
@@ -152,8 +152,8 @@ export function drawOverlay(
     ctx.strokeStyle = gridColor;
     ctx.lineWidth = 1;
     for (let t = firstTick; t <= vp.tEnd + 1e-9; t += step) {
-      const x = ((t - vp.tStart) / dt) * W;
-      if (x < 0 || x > W) continue;
+      const x = gutterLeft + ((t - vp.tStart) / dt) * plotWidth;
+      if (x < gutterLeft || x > W) continue;
       ctx.moveTo(Math.round(x) + 0.5, 0);
       ctx.lineTo(Math.round(x) + 0.5, traceHeight);
     }
@@ -176,9 +176,85 @@ export function drawOverlay(
     ctx.stroke();
   }
 
-  // 3. Time Axis & Time Labels
+  // 3. Left Gutter: Dedicated Y-Axis & Channel Labels
+  if (gutterLeft > 0) {
+    // Subtle background for gutter
+    const gutterBg = textColor.startsWith('#f') || textColor.startsWith('#e')
+      ? 'rgba(255, 255, 255, 0.02)'
+      : 'rgba(0, 0, 0, 0.02)';
+    ctx.fillStyle = gutterBg;
+    ctx.fillRect(0, 0, gutterLeft, traceHeight);
+
+    // Vertical Y-axis divider line separating gutter from plot
+    ctx.beginPath();
+    ctx.strokeStyle = laneSeparatorColor;
+    ctx.lineWidth = 1;
+    ctx.moveTo(Math.round(gutterLeft) + 0.5, 0);
+    ctx.lineTo(Math.round(gutterLeft) + 0.5, traceHeight);
+    ctx.stroke();
+
+    if (numChannels > 0 && opts.showChannelLabels !== false) {
+      const laneH = traceHeight / numChannels;
+
+      for (let i = 0; i < numChannels; i++) {
+        const ch = channels[i];
+        if (!ch) continue;
+
+        const yCenter = (i + 0.5) * laneH;
+        const halfH = Math.min(laneH * 0.38, 28);
+        const label = ch.label || `Ch ${i + 1}`;
+        const scaleVal = ch.scale ?? 100;
+        const unit = ch.unit ?? 'µV';
+
+        // 3a. Channel Name (bold, clear)
+        ctx.font = `700 ${fontSize}px ${fontFamily}`;
+        ctx.fillStyle = ch.color ?? textColor;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(label, 6, Math.round(yCenter - halfH));
+
+        // 3b. Channel Unit
+        ctx.font = `400 ${Math.max(8, fontSize - 2)}px ${fontFamily}`;
+        ctx.fillStyle = timeAxisColor;
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(`[${unit}]`, 6, Math.round(yCenter + halfH));
+
+        // 3c. Y-Axis Numerical Calibration Ticks
+        if (opts.showScaleBars !== false && laneH >= 24) {
+          ctx.font = `400 ${Math.max(8, fontSize - 2)}px ${fontFamily}`;
+          ctx.fillStyle = timeAxisColor;
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+
+          // Upper tick (+scale)
+          ctx.beginPath();
+          ctx.strokeStyle = laneSeparatorColor;
+          ctx.moveTo(gutterLeft - 4, Math.round(yCenter - halfH) + 0.5);
+          ctx.lineTo(gutterLeft, Math.round(yCenter - halfH) + 0.5);
+          ctx.stroke();
+          ctx.fillText(`+${scaleVal}`, gutterLeft - 6, yCenter - halfH);
+
+          // Center tick (0)
+          ctx.beginPath();
+          ctx.moveTo(gutterLeft - 3, Math.round(yCenter) + 0.5);
+          ctx.lineTo(gutterLeft, Math.round(yCenter) + 0.5);
+          ctx.stroke();
+          ctx.fillText('0', gutterLeft - 6, yCenter);
+
+          // Lower tick (-scale)
+          ctx.beginPath();
+          ctx.moveTo(gutterLeft - 4, Math.round(yCenter + halfH) + 0.5);
+          ctx.lineTo(gutterLeft, Math.round(yCenter + halfH) + 0.5);
+          ctx.stroke();
+          ctx.fillText(`-${scaleVal}`, gutterLeft - 6, yCenter + halfH);
+        }
+      }
+    }
+  }
+
+  // 4. Bottom Time Axis (X-Axis) with Collision Avoidance
   if (showTimeAxis) {
-    // Top border of time axis
+    // Horizontal border line separating plot from time axis
     ctx.beginPath();
     ctx.strokeStyle = laneSeparatorColor;
     ctx.lineWidth = 1;
@@ -187,104 +263,40 @@ export function drawOverlay(
     ctx.lineTo(W, axisY);
     ctx.stroke();
 
-    // Time labels
     ctx.font = `${fontSize}px ${fontFamily}`;
     ctx.fillStyle = timeAxisColor;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
     const labelY = traceHeight + timeAxisHeight * 0.5;
+    let lastLabelRightX = -Infinity;
+    const minSpacingPx = 18; // Minimum gap between adjacent tick labels
 
     for (let t = firstTick; t <= vp.tEnd + 1e-9; t += step) {
-      const x = ((t - vp.tStart) / dt) * W;
-      if (x < 35 || x > W - 35) continue; // Avoid overlapping viewport edges
+      const x = gutterLeft + ((t - vp.tStart) / dt) * plotWidth;
+      if (x < gutterLeft || x > W) continue;
 
-      const label = formatTimeLabel(
-        t,
-        step,
-        opts.recordingStartDate,
-        opts.showAbsoluteTime ?? false
-      );
-
-      ctx.fillText(label, Math.round(x), labelY);
-
-      // Small tick mark into the time axis
+      // Small tick mark into time axis
       ctx.beginPath();
       ctx.strokeStyle = laneSeparatorColor;
       ctx.moveTo(Math.round(x) + 0.5, traceHeight);
-      ctx.lineTo(Math.round(x) + 0.5, traceHeight + 4);
-      ctx.stroke();
-    }
-  }
-
-  // 4. Channel Labels & Scale Indicators
-  if (numChannels > 0 && opts.showChannelLabels !== false) {
-    const laneH = traceHeight / numChannels;
-
-    for (let i = 0; i < numChannels; i++) {
-      const ch = channels[i];
-      if (!ch) continue;
-
-      const yCenter = (i + 0.5) * laneH;
-      const label = ch.label || `Ch ${i + 1}`;
-      const scaleVal = ch.scale ?? 100;
-      const unit = ch.unit ?? 'µV';
-
-      // Small vertical calibration bracket mark on the left margin
-      const barX = 8;
-      const halfH = Math.min(laneH * 0.35, 18);
-      ctx.strokeStyle = ch.color ?? laneSeparatorColor;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      // Top cap
-      ctx.moveTo(barX - 3, yCenter - halfH);
-      ctx.lineTo(barX + 3, yCenter - halfH);
-      // Vertical stem
-      ctx.moveTo(barX, yCenter - halfH);
-      ctx.lineTo(barX, yCenter + halfH);
-      // Bottom cap
-      ctx.moveTo(barX - 3, yCenter + halfH);
-      ctx.lineTo(barX + 3, yCenter + halfH);
+      ctx.lineTo(Math.round(x) + 0.5, traceHeight + 5);
       ctx.stroke();
 
-      // Measure channel label text width for badge background
-      ctx.font = `600 ${fontSize + 1}px ${fontFamily}`;
+      const label = formatTimeLabel(t, step);
       const metrics = ctx.measureText(label);
-      const badgeW = metrics.width + 10;
-      const badgeH = fontSize + 8;
-      const badgeX = barX + 8;
-      const badgeY = yCenter - badgeH / 2;
+      const halfW = metrics.width / 2;
+      const leftX = x - halfW;
+      const rightX = x + halfW;
 
-      // Semi-transparent label background pill for readability over overlapping traces
-      const defaultBadgeBg = textColor.startsWith('#f') || textColor.startsWith('#e')
-        ? 'rgba(30, 30, 35, 0.90)'
-        : 'rgba(255, 255, 255, 0.90)';
-      ctx.fillStyle = opts.badgeBgColor ?? defaultBadgeBg;
-      ctx.beginPath();
-      if (typeof ctx.roundRect === 'function') {
-        ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 4);
-      } else {
-        ctx.rect(badgeX, badgeY, badgeW, badgeH);
-      }
-      ctx.fill();
-
-      // Subtle border on badge
-      ctx.strokeStyle = ch.color ? `${ch.color}55` : laneSeparatorColor;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      // Channel label text
-      ctx.fillStyle = ch.color ?? textColor;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(label, badgeX + 5, yCenter);
-
-      // Scale indicator text & calibration bar
-      if (opts.showScaleBars !== false) {
-        const scaleText = `±${scaleVal} ${unit}`;
-        ctx.font = `400 ${Math.max(9, fontSize - 2)}px ${fontFamily}`;
-        ctx.fillStyle = timeAxisColor;
-        ctx.fillText(scaleText, badgeX + badgeW + 6, yCenter);
+      // Avoid collision with previous label or canvas edges
+      if (
+        leftX >= lastLabelRightX + minSpacingPx &&
+        leftX >= gutterLeft + 4 &&
+        rightX <= W - 4
+      ) {
+        ctx.fillText(label, Math.round(x), labelY);
+        lastLabelRightX = rightX;
       }
     }
   }

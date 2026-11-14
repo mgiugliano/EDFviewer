@@ -292,6 +292,18 @@ export class EdfEngine {
     }
 
     if (chReq.filter !== undefined) {
+      if (this.isOverviewReady()) {
+        const firstSample = t0 * fs;
+        const samplesPerBucket = (t1 - t0) * fs / widthPx;
+        const buckets = this.pyramid!.query(chReq.a, firstSample, samplesPerBucket, widthPx);
+        return {
+          kind: 'minmax',
+          values: buckets,
+          t0,
+          step: (t1 - t0) / widthPx,
+          needsZoom: 'filter',
+        };
+      }
       return {
         kind: 'minmax',
         values: new Float32Array(widthPx * 2).fill(NaN),
