@@ -210,6 +210,53 @@ async function main() {
       console.log('Captured /tmp/edf_filtered_panned.png');
     }
 
+    // 12. Test Line Thickness selector and localStorage persistence
+    console.log('Testing Line Thickness selector (2.5 px)...');
+    await page.selectOption('select.line-select', '2.5');
+    await sleep(300);
+    const storedThickness = await page.evaluate(() =>
+      localStorage.getItem('edf_viewer_line_thickness')
+    );
+    console.log(`Stored line thickness in localStorage: ${storedThickness}`);
+    if (storedThickness !== '2.5') {
+      throw new Error(`Expected line thickness '2.5', got '${storedThickness}'`);
+    }
+
+    // 13. Test Redraw button and R hotkey
+    console.log('Testing Redraw button and R hotkey...');
+    const redrawBtn = await page.$('.redraw-btn');
+    if (!redrawBtn) {
+      throw new Error('Redraw button not found');
+    }
+    await redrawBtn.click();
+    await sleep(300);
+    await page.keyboard.press('r');
+    await sleep(300);
+
+    // 14. Test Help modal (?) and acknowledgment text
+    console.log('Testing Help (?) modal and acknowledgment text...');
+    const helpBtn = await page.$('.help-btn');
+    if (!helpBtn) {
+      throw new Error('Help (?) button not found');
+    }
+    await helpBtn.click();
+    await page.waitForSelector('.ack-box', { timeout: 3000 });
+
+    const ackContent = await page.$eval('.ack-box', (el) => el.textContent?.trim());
+    console.log(`Acknowledgment box content: "${ackContent}"`);
+    if (
+      !ackContent?.includes('M. Giugliano and O. Kryukova for G. Curia\'s lab') ||
+      !ackContent?.includes('0.1') ||
+      !ackContent?.includes('Nov 2026')
+    ) {
+      throw new Error(`Acknowledgment text missing required details: "${ackContent}"`);
+    }
+    await page.screenshot({ path: '/tmp/edf_help_modal.png' });
+    console.log('Captured /tmp/edf_help_modal.png');
+
+    await page.keyboard.press('Escape');
+    await sleep(300);
+
     console.log('\n--- ALL BROWSER SMOKE TEST ACTIONS PASSED SUCCESSFULLY ---');
   } finally {
     if (browser) {

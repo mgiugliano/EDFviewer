@@ -84,6 +84,8 @@
   // Render Data
   let traceDataList = $state<TraceData[]>([]);
   let channelStyles = $state<ChannelStyle[]>([]);
+  let lineThickness = $state<number>(1.5);
+  let viewportRef = $state<any>(null);
 
   // Modals State
   let showFilterModal = $state<boolean>(false);
@@ -152,6 +154,18 @@
       }
     } catch {
       isDark = true;
+    }
+
+    try {
+      const savedThickness = localStorage.getItem('edf_viewer_line_thickness');
+      if (savedThickness) {
+        const val = parseFloat(savedThickness);
+        if (!isNaN(val) && val >= 0.5 && val <= 5.0) {
+          lineThickness = val;
+        }
+      }
+    } catch {
+      lineThickness = 1.5;
     }
 
     presets = getSavedPresets();
@@ -286,6 +300,23 @@
       isLoading = false;
       console.error('Failed to load trace view:', err);
     }
+  }
+
+  function handleChangeLineThickness(thickness: number) {
+    lineThickness = thickness;
+    try {
+      localStorage.setItem('edf_viewer_line_thickness', String(thickness));
+    } catch {
+      // ignore
+    }
+  }
+
+  function handleRedraw() {
+    if (!edfClient || !header) return;
+    const curStart = tStart;
+    const curEnd = tStart + pageDurationSec;
+    fetchTraces(curStart, curEnd, montage.channels);
+    viewportRef?.forceRedraw();
   }
 
   // -------------------------------------------------------------------------
@@ -629,6 +660,12 @@
       return;
     }
 
+    if (e.key === 'r' || e.key === 'R') {
+      e.preventDefault();
+      handleRedraw();
+      return;
+    }
+
     if (e.key === 'n' || e.key === 'N') {
       e.preventDefault();
       handleJumpNextAnnotation();
@@ -723,6 +760,7 @@
     {presets}
     {isDark}
     {pageDurationSec}
+    {lineThickness}
     {isSidebarOpen}
     {isAnnotationSidebarOpen}
     annotationCount={annotations.length}
@@ -732,6 +770,8 @@
     onOpenSavePresetModal={() => (showPresetNameModal = true)}
     onExportMontage={handleExportMontage}
     onImportMontage={handleImportMontage}
+    onChangeLineThickness={handleChangeLineThickness}
+    onRedraw={handleRedraw}
     onChangePageDuration={(dur) => {
       pageDurationSec = dur;
       montage = { ...montage, pageDurationSec: dur };
@@ -759,6 +799,7 @@
     <!-- Trace Canvas Viewport -->
     <main class="viewport-area">
       <Viewport
+        bind:this={viewportRef}
         hasFile={Boolean(header)}
         {tStart}
         {tEnd}
@@ -768,6 +809,7 @@
         {isDark}
         {recordingStartDate}
         {isLoading}
+        {lineThickness}
         {needsZoomWarning}
         {annotations}
         {isAnnotateMode}

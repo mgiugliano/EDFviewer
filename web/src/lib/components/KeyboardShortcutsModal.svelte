@@ -20,6 +20,7 @@
     { key: 'Shift + Click', desc: 'Annotate point marker directly on canvas' },
     { key: 'N / P', desc: 'Jump to Next / Previous annotation' },
     { key: 'A', desc: 'Toggle Annotations sidebar' },
+    { key: 'R', desc: 'Redraw / refresh display traces' },
     { key: 'G', desc: 'Go to specific timestamp or second' },
     { key: 'Space', desc: 'Toggle auto-scroll playback' },
     { key: '?', desc: 'Toggle this keyboard shortcuts cheatsheet' },
@@ -45,6 +46,12 @@
               <span class="desc-text">{sc.desc}</span>
             </div>
           {/each}
+        </div>
+
+        <div class="ack-box">
+          <div class="ack-title">EDF Viewer <span class="ack-version">v0.1</span></div>
+          <div class="ack-text">by M. Giugliano and O. Kryukova for G. Curia's lab</div>
+          <div class="ack-date">Nov 2026</div>
         </div>
       </div>
 
@@ -146,6 +153,40 @@
     font-size: 12px;
     color: var(--text-secondary);
     text-align: right;
+  }
+
+  .ack-box {
+    margin-top: 16px;
+    padding: 10px 12px;
+    background: var(--bg-primary);
+    border: 1px dashed var(--border-color);
+    border-radius: 6px;
+    text-align: center;
+  }
+
+  .ack-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+  }
+
+  .ack-version {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--text-muted);
+  }
+
+  .ack-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-style: italic;
+  }
+
+  .ack-date {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
   }
 
   .modal-footer {

@@ -23,6 +23,7 @@ uniform float u_laneCenter;      // NDC y-center [-1.0 .. 1.0]
 uniform float u_laneHalfHeight;  // NDC half-height [0.0 .. 1.0]
 uniform float u_scale;           // physical units per lane half-height
 uniform float u_invert;          // 1.0 = invert polarity, 0.0 = normal
+uniform vec2 u_pixelOffset;      // clip space offset for thick lines (dx, dy)
 
 out float v_laneOffset;
 
@@ -44,7 +45,7 @@ void main() {
     // Map to clip space y
     float y = u_laneCenter + offset * u_laneHalfHeight;
     
-    gl_Position = vec4(x, y, 0.0, 1.0);
+    gl_Position = vec4(x + u_pixelOffset.x, y + u_pixelOffset.y, 0.0, 1.0);
 }
 `;
 
@@ -81,11 +82,15 @@ export class TraceRenderer {
   private u_invertLoc: WebGLUniformLocation | null = null;
   private u_colorLoc: WebGLUniformLocation | null = null;
   private u_clipLimitLoc: WebGLUniformLocation | null = null;
+  private u_pixelOffsetLoc: WebGLUniformLocation | null = null;
 
   // Channel buffers & state
   private channelBuffers: ChannelBuffer[] = [];
   private traces: TraceData[] = [];
   private styles: ChannelStyle[] = [];
+
+  // Line thickness in CSS pixels (1.0 to 3.0)
+  private lineWidth: number = 1.5;
 
   // Display & theme options
   private bgColor: [number, number, number, number] = [1.0, 1.0, 1.0, 1.0];
@@ -186,6 +191,7 @@ export class TraceRenderer {
     this.u_invertLoc = gl.getUniformLocation(program, 'u_invert');
     this.u_colorLoc = gl.getUniformLocation(program, 'u_color');
     this.u_clipLimitLoc = gl.getUniformLocation(program, 'u_clipLimit');
+    this.u_pixelOffsetLoc = gl.getUniformLocation(program, 'u_pixelOffset');
   }
 
   private handleContextLost(e: Event): void {
@@ -311,6 +317,27 @@ export class TraceRenderer {
     gl.uniform1f(this.u_dtLoc, dt);
     gl.uniform1f(this.u_clipLimitLoc, this.clipLanes ? this.clipThreshold : 0.0);
 
+    // Subpixel rasterization offsets for variable line thickness
+    const passes: [number, number][] = [[0, 0]];
+    if (this.lineWidth >= 1.2 && this.lineWidth < 1.8) {
+      passes.push([0, -0.5], [0, 0.5]);
+    } else if (this.lineWidth >= 1.8 && this.lineWidth < 2.3) {
+      passes.push([0, -0.75], [0, 0.75], [-0.5, 0], [0.5, 0]);
+    } else if (this.lineWidth >= 2.3 && this.lineWidth < 2.8) {
+      passes.push(
+        [0, -1.0], [0, 1.0],
+        [-0.75, 0], [0.75, 0],
+        [-0.5, -0.5], [0.5, 0.5]
+      );
+    } else if (this.lineWidth >= 2.8) {
+      passes.push(
+        [0, -1.25], [0, 1.25],
+        [-1.0, 0], [1.0, 0],
+        [-0.7, -0.7], [0.7, 0.7],
+        [-0.7, 0.7], [0.7, -0.7]
+      );
+    }
+
     for (let i = 0; i < numChannels; i++) {
       const chBuf = this.channelBuffers[i];
       if (!chBuf || chBuf.vertexCount === 0) continue;
@@ -335,7 +362,14 @@ export class TraceRenderer {
       gl.uniform4fv(this.u_colorLoc, color);
 
       gl.bindVertexArray(chBuf.vao);
-      gl.drawArrays(gl.LINE_STRIP, 0, chBuf.vertexCount);
+      for (const [pxX, pxY] of passes) {
+        const dxClip = (pxX * vp.dpr * 2.0) / traceW;
+        const dyClip = (pxY * vp.dpr * 2.0) / traceH;
+        if (this.u_pixelOffsetLoc) {
+          gl.uniform2f(this.u_pixelOffsetLoc, dxClip, dyClip);
+        }
+        gl.drawArrays(gl.LINE_STRIP, 0, chBuf.vertexCount);
+      }
     }
 
     gl.bindVertexArray(null);
@@ -381,6 +415,17 @@ export class TraceRenderer {
   public setClipLanes(clip: boolean, threshold: number = 1.5): void {
     this.clipLanes = clip;
     this.clipThreshold = threshold;
+  }
+
+  /**
+   * Set line thickness in CSS pixels (e.g. 1.0, 1.5, 2.0, 2.5, 3.0).
+   */
+  public setLineWidth(width: number): void {
+    this.lineWidth = Math.max(0.5, Math.min(5.0, width));
+  }
+
+  public getLineWidth(): number {
+    return this.lineWidth;
   }
 
   /**

@@ -22,6 +22,9 @@
     onOpenSavePresetModal: () => void;
     onExportMontage: () => void;
     onImportMontage: (jsonStr: string) => void;
+    lineThickness: number;
+    onChangeLineThickness: (thickness: number) => void;
+    onRedraw: () => void;
     onChangePageDuration: (dur: number) => void;
     onToggleTheme: () => void;
     onToggleSidebar: () => void;
@@ -36,6 +39,7 @@
     presets,
     isDark,
     pageDurationSec,
+    lineThickness = 1.5,
     isSidebarOpen,
     isAnnotationSidebarOpen = false,
     annotationCount = 0,
@@ -45,6 +49,8 @@
     onOpenSavePresetModal,
     onExportMontage,
     onImportMontage,
+    onChangeLineThickness,
+    onRedraw,
     onChangePageDuration,
     onToggleTheme,
     onToggleSidebar,
@@ -214,6 +220,35 @@
       </select>
     </div>
 
+    <!-- Line Thickness Selector -->
+    <div class="line-thickness-box">
+      <span class="toolbar-label">Line:</span>
+      <select
+        class="toolbar-select line-select"
+        value={lineThickness}
+        onchange={(e) =>
+          onChangeLineThickness(parseFloat((e.target as HTMLSelectElement).value))}
+        title="Trace line thickness"
+      >
+        <option value={1}>1.0 px</option>
+        <option value={1.5}>1.5 px</option>
+        <option value={2}>2.0 px</option>
+        <option value={2.5}>2.5 px</option>
+        <option value={3}>3.0 px</option>
+      </select>
+    </div>
+
+    <!-- Force Redraw Button -->
+    <button
+      class="toolbar-btn redraw-btn"
+      onclick={onRedraw}
+      title="Force Redraw Traces (R)"
+      aria-label="Redraw Traces"
+    >
+      <span class="btn-icon">🔄</span>
+      <span>Redraw</span>
+    </button>
+
     <!-- Theme Toggle -->
     <button
       class="icon-btn"
@@ -344,7 +379,8 @@
     color: var(--text-muted);
   }
 
-  .page-duration-box {
+  .page-duration-box,
+  .line-thickness-box {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -371,6 +407,15 @@
 
   .duration-select {
     width: 80px;
+  }
+
+  .line-select {
+    width: 76px;
+  }
+
+  .redraw-btn {
+    padding: 4px 8px;
+    font-size: 12px;
   }
 
   .icon-btn {

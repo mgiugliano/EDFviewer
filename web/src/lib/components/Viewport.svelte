@@ -18,6 +18,7 @@
     recordingStartDate?: Date;
     isLoading?: boolean;
     needsZoomWarning?: string | null;
+    lineThickness?: number;
     annotations?: ViewerAnnotation[];
     isAnnotateMode?: boolean;
     activePreset?: AnnotationPreset;
@@ -46,6 +47,7 @@
     recordingStartDate,
     isLoading = false,
     needsZoomWarning = null,
+    lineThickness = 1.5,
     annotations = [],
     isAnnotateMode = false,
     activePreset = DEFAULT_ANNOTATION_PRESETS[0],
@@ -105,9 +107,15 @@
       const bg = isDark ? '#121214' : '#ffffff';
       const grid = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)';
       renderer.setTheme({ background: bg, grid });
+      renderer.setLineWidth(lineThickness);
       requestDraw();
     }
   });
+
+  export function forceRedraw() {
+    handleResize();
+    requestDraw();
+  }
 
   $effect(() => {
     // Redraw whenever annotations, hovered, or selected changes
@@ -122,6 +130,7 @@
       const bg = isDark ? '#121214' : '#ffffff';
       const grid = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)';
       renderer.setTheme({ background: bg, grid });
+      renderer.setLineWidth(lineThickness);
       if (traces && styles) {
         renderer.setData(traces, styles);
       }
