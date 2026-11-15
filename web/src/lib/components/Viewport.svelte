@@ -621,10 +621,16 @@
     >
       <div class="empty-card">
         <div class="empty-icon">📈</div>
-        <h2>Open an EDF or EDF+ File</h2>
-        <p>Drop your file anywhere on the window, or click here to browse.</p>
+        <h2>Open an Electrophysiology Recording</h2>
+        <p>Drop your file(s) anywhere on the window, or click here to browse.</p>
+        <div class="supported-formats-pills">
+          <span class="format-pill">EDF / EDF+ (.edf, .rec)</span>
+          <span class="format-pill">Neuralynx / Persyst (*.ncs)</span>
+          <span class="format-pill">Persyst (.lay + .dat)</span>
+          <span class="format-pill">ADInstruments (.adicht)</span>
+        </div>
         <div class="privacy-note">
-          🔒 <strong>100% Client-Side Privacy:</strong> All signal decoding and filtering is processed locally in your browser via WebAssembly. No EEG data leaves your computer.
+          🔒 <strong>100% Client-Side Privacy:</strong> All signal decoding and filtering is processed locally in your browser via WebAssembly. No electrophysiology data leaves your computer.
         </div>
       </div>
     </div>
@@ -853,9 +859,28 @@
   }
 
   .empty-card p {
-    margin: 0 0 20px 0;
+    margin: 0 0 14px 0;
     font-size: 14px;
     color: var(--text-secondary);
+  }
+
+  .supported-formats-pills {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 20px;
+  }
+
+  .format-pill {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: monospace;
+    font-weight: 500;
   }
 
   .privacy-note {
