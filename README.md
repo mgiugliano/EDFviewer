@@ -141,6 +141,7 @@ The matrix is rasterized to an offscreen image and mapped via the **Viridis** co
 - **Toggle Channels**: Click the checkbox next to any channel name in the left sidebar to show or hide it.
 - **Adjust Amplitude Scale**: Click `+` or `-` on any channel card to zoom voltage in or out, or press `↑` / `↓` to scale all channels simultaneously.
 - **Line Thickness**: Select `1.0 px`, `1.5 px`, `2.0 px`, `2.5 px`, or `3.0 px` from the **Line** dropdown in the toolbar.
+- **GUI Font Size & Readability Scale**: Click **A⁻** / **A⁺** or select from the **Font** dropdown in the toolbar (`100%`, `115%`, `130%`, `150%`) to comfortably scale all GUI elements, sidebars, modals, and canvas channel/voltage labels across displays of any size or DPI.
 - **Bipolar Derivation**: Click **+ Add Bipolar Derivation** in the sidebar to compute differential signals ($V_A - V_B$).
 - **Save Montage**: Save your customized channel layout, colors, and gains as a JSON preset via the Montage menu for reuse across recordings.
 

@@ -19,6 +19,7 @@
     isLoading?: boolean;
     needsZoomWarning?: string | null;
     lineThickness?: number;
+    fontSizeScale?: number;
     annotations?: ViewerAnnotation[];
     isAnnotateMode?: boolean;
     activePreset?: AnnotationPreset;
@@ -48,6 +49,7 @@
     isLoading = false,
     needsZoomWarning = null,
     lineThickness = 1.5,
+    fontSizeScale = 1.0,
     annotations = [],
     isAnnotateMode = false,
     activePreset = DEFAULT_ANNOTATION_PRESETS[0],
@@ -119,7 +121,7 @@
 
   $effect(() => {
     // Redraw whenever annotations, hovered, or selected changes
-    if (annotations || selectedAnnotationId) {
+    if (annotations || selectedAnnotationId || fontSizeScale) {
       requestDraw();
     }
   });
@@ -222,8 +224,8 @@
     animFrameId = requestAnimationFrame(draw);
   }
 
-  const GUTTER_LEFT = 75;
-  const TIME_AXIS_HEIGHT = 24;
+  const GUTTER_LEFT = $derived(Math.round(75 * fontSizeScale));
+  const TIME_AXIS_HEIGHT = $derived(Math.round(24 * fontSizeScale));
 
   function draw() {
     animFrameId = 0;
@@ -252,6 +254,7 @@
       channels: styles,
       gutterLeftPx: GUTTER_LEFT,
       timeAxisHeightPx: TIME_AXIS_HEIGHT,
+      fontSizePx: Math.round(11 * fontSizeScale),
       gridColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
       gridSubColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.03)',
       laneSeparatorColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.10)',
@@ -272,6 +275,8 @@
       channels: styles,
       gutterLeftPx: GUTTER_LEFT,
       timeAxisHeightPx: TIME_AXIS_HEIGHT,
+      fontSizePx: Math.round(11 * fontSizeScale),
+      fontScale: fontSizeScale,
       hoveredId: hoveredAnnotation?.id,
       selectedId: selectedAnnotationId,
       creatingRange,

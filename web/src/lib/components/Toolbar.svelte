@@ -27,6 +27,10 @@
     onImportMontage: (jsonStr: string) => void;
     lineThickness: number;
     onChangeLineThickness: (thickness: number) => void;
+    fontSizeScale?: number;
+    onChangeFontSize?: (scale: number) => void;
+    onIncreaseFontSize?: () => void;
+    onDecreaseFontSize?: () => void;
     onRedraw: () => void;
     onChangePageDuration: (dur: number) => void;
     onToggleTheme: () => void;
@@ -43,6 +47,7 @@
     isDark,
     pageDurationSec,
     lineThickness = 1.5,
+    fontSizeScale = 1.0,
     isSidebarOpen,
     isAnnotationSidebarOpen = false,
     annotationCount = 0,
@@ -56,6 +61,9 @@
     onExportMontage,
     onImportMontage,
     onChangeLineThickness,
+    onChangeFontSize,
+    onIncreaseFontSize,
+    onDecreaseFontSize,
     onRedraw,
     onChangePageDuration,
     onToggleTheme,
@@ -244,6 +252,37 @@
       </select>
     </div>
 
+    <!-- Font Size / Readability Controls -->
+    <div class="font-size-box" title="GUI Font Size / Readability Scale">
+      <span class="toolbar-label">Font:</span>
+      <button
+        class="font-step-btn"
+        disabled={fontSizeScale <= 1.0}
+        onclick={onDecreaseFontSize}
+        title="Decrease GUI Font Size"
+        aria-label="Decrease Font Size"
+      >A⁻</button>
+      <select
+        class="toolbar-select font-select"
+        value={fontSizeScale}
+        onchange={(e) =>
+          onChangeFontSize?.(parseFloat((e.target as HTMLSelectElement).value))}
+        title="GUI Font Size / Readability Scale"
+      >
+        <option value={1.0}>100%</option>
+        <option value={1.15}>115%</option>
+        <option value={1.3}>130%</option>
+        <option value={1.5}>150%</option>
+      </select>
+      <button
+        class="font-step-btn"
+        disabled={fontSizeScale >= 1.5}
+        onclick={onIncreaseFontSize}
+        title="Increase GUI Font Size"
+        aria-label="Increase Font Size"
+      >A⁺</button>
+    </div>
+
     <!-- Force Redraw Button -->
     <button
       class="toolbar-btn redraw-btn"
@@ -413,10 +452,43 @@
   }
 
   .page-duration-box,
-  .line-thickness-box {
+  .line-thickness-box,
+  .font-size-box {
     display: flex;
     align-items: center;
     gap: 4px;
+  }
+
+  .font-select {
+    width: 72px;
+    padding: 4px 4px;
+    font-size: 11px;
+  }
+
+  .font-step-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .font-step-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    border-color: var(--accent-color);
+  }
+
+  .font-step-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
   .toolbar-select {

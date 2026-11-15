@@ -97,6 +97,7 @@
   let traceDataList = $state<TraceData[]>([]);
   let channelStyles = $state<ChannelStyle[]>([]);
   let lineThickness = $state<number>(1.5);
+  let fontSizeScale = $state<number>(1.0);
   let viewportRef = $state<any>(null);
 
   // Spectrogram State
@@ -201,6 +202,18 @@
       }
     } catch {
       lineThickness = 1.5;
+    }
+
+    try {
+      const savedFontScale = localStorage.getItem('edf_viewer_font_scale');
+      if (savedFontScale) {
+        const val = parseFloat(savedFontScale);
+        if (!isNaN(val) && [1.0, 1.15, 1.3, 1.5].some((l) => Math.abs(l - val) < 0.05)) {
+          fontSizeScale = val;
+        }
+      }
+    } catch {
+      fontSizeScale = 1.0;
     }
 
     presets = getSavedPresets();
@@ -403,6 +416,41 @@
     } catch {
       // ignore
     }
+  }
+
+  $effect(() => {
+    const scaleStr = fontSizeScale.toFixed(2);
+    document.documentElement.setAttribute('data-font-size', scaleStr);
+    document.documentElement.style.setProperty('--font-scale', String(fontSizeScale));
+    try {
+      localStorage.setItem('edf_viewer_font_scale', scaleStr);
+    } catch {
+      // ignore
+    }
+  });
+
+  const FONT_LEVELS = [1.0, 1.15, 1.3, 1.5];
+
+  function handleIncreaseFontSize() {
+    const idx = FONT_LEVELS.findIndex((l) => Math.abs(l - fontSizeScale) < 0.05);
+    if (idx !== -1 && idx < FONT_LEVELS.length - 1) {
+      fontSizeScale = FONT_LEVELS[idx + 1];
+    } else if (idx === -1) {
+      fontSizeScale = 1.15;
+    }
+  }
+
+  function handleDecreaseFontSize() {
+    const idx = FONT_LEVELS.findIndex((l) => Math.abs(l - fontSizeScale) < 0.05);
+    if (idx !== -1 && idx > 0) {
+      fontSizeScale = FONT_LEVELS[idx - 1];
+    } else if (idx === -1) {
+      fontSizeScale = 1.0;
+    }
+  }
+
+  function handleChangeFontSize(scale: number) {
+    fontSizeScale = scale;
   }
 
   function handleRedraw() {
@@ -1019,6 +1067,7 @@
     {isDark}
     {pageDurationSec}
     {lineThickness}
+    {fontSizeScale}
     {isSidebarOpen}
     {isAnnotationSidebarOpen}
     annotationCount={visibleAnnotations.length}
@@ -1032,6 +1081,9 @@
     onExportMontage={handleExportMontage}
     onImportMontage={handleImportMontage}
     onChangeLineThickness={handleChangeLineThickness}
+    onChangeFontSize={handleChangeFontSize}
+    onIncreaseFontSize={handleIncreaseFontSize}
+    onDecreaseFontSize={handleDecreaseFontSize}
     onRedraw={handleRedraw}
     onChangePageDuration={(dur) => {
       pageDurationSec = dur;
@@ -1072,6 +1124,7 @@
           {recordingStartDate}
           {isLoading}
           {lineThickness}
+          {fontSizeScale}
           {needsZoomWarning}
           annotations={visibleAnnotations}
           {isAnnotateMode}

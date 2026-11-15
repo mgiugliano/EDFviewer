@@ -8,6 +8,8 @@ export interface AnnotationDrawOptions {
   creatingRange?: { t0: number; t1: number; label: string; color: string } | null;
   timeAxisHeightPx?: number;
   gutterLeftPx?: number;
+  fontScale?: number;
+  fontSizePx?: number;
 }
 
 /**
@@ -92,7 +94,9 @@ export function drawAnnotations(
   ctx.scale(dpr, dpr);
 
   const fontFamily = 'system-ui, -apple-system, sans-serif';
-  const fontSize = 10;
+  const fontScale = opts.fontScale ?? 1.0;
+  const fontSize = opts.fontSizePx ?? Math.round(10 * fontScale);
+  const chipH = Math.round(18 * fontScale);
   ctx.font = `600 ${fontSize}px ${fontFamily}`;
 
   // 1. Render existing annotations
@@ -156,7 +160,6 @@ export function drawAnnotations(
       ctx.font = `600 ${fontSize}px ${fontFamily}`;
       const textMetrics = ctx.measureText(labelText);
       const chipW = textMetrics.width + 10;
-      const chipH = 18;
       // Position chip at the top of the band
       const chipX = Math.max(gutterLeft + 2, Math.min(W - chipW - 2, left));
       const chipY = Math.max(2, yTop + 3);
@@ -263,23 +266,23 @@ export function drawAnnotations(
     ctx.font = `600 ${fontSize}px ${fontFamily}`;
     const textMetrics = ctx.measureText(chipText);
     const chipW = textMetrics.width + 12;
-    const chipH = 20;
+    const createChipH = Math.round(20 * fontScale);
     const chipX = Math.max(gutterLeft + 4, Math.min(W - chipW - 4, left));
     const chipY = 6;
 
     ctx.fillStyle = color;
     ctx.beginPath();
     if (typeof ctx.roundRect === 'function') {
-      ctx.roundRect(chipX, chipY, chipW, chipH, 4);
+      ctx.roundRect(chipX, chipY, chipW, createChipH, 4);
     } else {
-      ctx.rect(chipX, chipY, chipW, chipH);
+      ctx.rect(chipX, chipY, chipW, createChipH);
     }
     ctx.fill();
 
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(chipText, chipX + 6, chipY + chipH / 2);
+    ctx.fillText(chipText, chipX + 6, chipY + createChipH / 2);
   }
 
   ctx.restore();
