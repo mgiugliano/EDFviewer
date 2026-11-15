@@ -17,20 +17,32 @@ Multi-gigabyte recordings load seamlessly as if they were tiny files: data chunk
 
 ## Visual Tour
 
-| Multi-Channel Continuous Trace View | Split Time-Frequency Spectrogram (Viridis) |
-| :---: | :---: |
-| ![EDF Viewer Live Traces](docs/images/main_view.png) | ![Spectrogram View](docs/images/spectrogram.png) |
-| *Dedicated calibration gutter (±scale bars, units, zero-line), custom channel colors, smooth 60 fps panning.* | *Interactive STFT heatmap synchronized with trace, hover cursor showing exact time, frequency, and dB power.* |
+All screenshots below were captured directly from the live application using the laboratory sample recording `20201007a_HFO_CUT.edf` ($f_s = 4000\text{ Hz}$, 6 channels) and its HFOapp detection report `20201007a_HFO_CUT.txt`:
 
-| Interactive Annotations Layer & Sidebar | Keyboard Shortcuts & Lab Attribution |
+| Multi-Channel Raw Electrophysiology View | Split Time-Frequency Spectrogram (Viridis) |
 | :---: | :---: |
-| ![Annotations Sidebar](docs/images/annotations.png) | ![Attribution Modal](docs/images/help_modal.png) |
-| *Fast click/drag event marking, quick palettes (1–9), search filtering, CSV export/import, IndexedDB autosave.* | *Full keyboard shortcuts reference and laboratory acknowledgment.* |
+| ![Multi-Channel Live Traces](docs/images/main_view.png) | ![Spectrogram View](docs/images/spectrogram.png) |
+| *6-channel continuous recording (`FCR`, `CA3D-R`, `CA3V-R`, `FCL`, `DGD-L`, `DGV-L`) with calibrated vertical scale bars ($\pm\mu\text{V}$), channel derivations, zero-lines, and time ruler.* | *Interactive STFT time-frequency heatmap synchronized with channel `FCR`, displaying localized spectral power across 0–500 Hz.* |
 
-| HFOapp Detections & Layer Visibility Toggles | Quantitative HFO Analysis & Detector Comparison |
+| Online Zero-Phase Filtering (80–500 Hz Bandpass + 50 Hz Notch) | Spectrogram Hover Cursor & Power Readout |
 | :---: | :---: |
-| ![HFO Trace Highlights](docs/images/hfo_trace_highlight.png) | ![HFO Summary Modal](docs/images/hfo_summary_modal.png) |
-| *Channel-specific HFO highlight spans (Ripples, Fast Ripples), individual layer toggle (👁️/🚫), color coding, and quick navigation.* | *Channel-by-channel breakdown table (counts, durations) and cross-detector side-by-side comparison.* |
+| ![Filtered Electrophysiology View](docs/images/filtered_view.png) | ![Spectrogram Hover Inspection](docs/images/spectrogram_hover.png) |
+| *Real-time causal & anti-causal Butterworth filtering on channel `FCR` with reflected Gustafsson boundary padding to eliminate edge transients.* | *High-precision crosshair cursor reporting exact timestamp ($t = 27.84\text{ s}$), oscillation frequency ($491.2\text{ Hz}$), and calibrated power ($-18.4\text{ dB}$).* |
+
+| HFO Trace Highlights with Rich Tooltip | Multi-Detector Cross-Comparison (`HFOapp` vs. `Clone`) |
+| :---: | :---: |
+| ![HFO Trace Highlights](docs/images/hfo_trace_highlight.png) | ![Multi-Detector Comparison](docs/images/hfo_comparison.png) |
+| *Zoomed trace view centered on a high-frequency ripple event on channel `FCR` with translucent highlight band, upper badge, and frequency/Z-score/cycles tooltip.* | *Two independent detector runs overlaid on the same channel trace (`HFOapp Reference` in Blue vs. `Detector Clone` in Magenta) to inspect agreement and discrepancies.* |
+
+| Annotations Sidebar & Layer Management | Quantitative HFO Analysis & Cross-Detector Report |
+| :---: | :---: |
+| ![Annotations Sidebar](docs/images/annotations.png) | ![HFO Summary Modal](docs/images/hfo_summary_modal.png) |
+| *Layer list with individual visibility toggles (`👁️`/`🚫`), custom color swatches, event counts, type chips (All: 280, ripple: 279, fastripple: 1), and jump navigation.* | *Channel-by-channel quantitative breakdown table (Ripples, Fast Ripples, Spikes, and cumulative durations) with side-by-side detector comparison.* |
+
+| Keyboard Shortcuts & Laboratory Attribution |
+| :---: |
+| ![Attribution Modal](docs/images/help_modal.png) |
+| *Full keyboard shortcuts reference and laboratory acknowledgment for Michele Giugliano and Olga Kryukova (Giulia Curia's Laboratory, Nov 2026, version 0.1).* |
 
 ---
 
@@ -115,8 +127,8 @@ The matrix is rasterized to an offscreen image and mapped via the **Viridis** co
 
 ### Step 1: Opening a File
 1. Visit [https://blog.giugliano.info/EDFviewer/](https://blog.giugliano.info/EDFviewer/) in Chrome, Edge, Safari, or Firefox.
-2. Click **📂 Open EDF** in the top-left toolbar, or drag and drop any `.edf` / `.rec` file anywhere onto the browser window.
-3. The recording duration, primary sampling rate, channel count, and EDF+ indicator will appear in the top metadata pill.
+2. Click **📂 Open EDF** in the top-left toolbar, or drag and drop any `.edf` / `.rec` file anywhere onto the browser window (e.g., sample recording `20201007a_HFO_CUT.edf`).
+3. The recording duration ($549\text{ s}$), primary sampling rate ($4000\text{ Hz}$), channel count (6 channels: `FCR`, `CA3D-R`, `CA3V-R`, `FCL`, `DGD-L`, `DGV-L`), and EDF indicator will appear in the top metadata pill.
 
 ### Step 2: Navigating the Recording
 - **Smooth Panning**: Click and drag horizontally across the traces to glide through time.
@@ -158,18 +170,20 @@ The matrix is rasterized to an offscreen image and mapped via the **Viridis** co
 
 ### Step 7: Importing HFOapp Reports & Comparing Detector Runs
 1. **Importing Reports**:
-   - Open your EDF file first.
+   - Open your EDF file first (e.g., `20201007a_HFO_CUT.edf`).
    - Click **⚡ HFOapp** in the Annotations panel, or simply **drag-and-drop** any `.txt` detection report (e.g., `20201007a_HFO_CUT.txt`) or `_summary.txt` file directly onto the viewer.
    - The viewer automatically converts sample locations to exact timestamps based on channel sampling rates:
      $$\text{onset (s)} = \frac{\text{start\_sample}}{f_s}, \quad \text{duration (s)} = \frac{\text{end\_sample} - \text{start\_sample}}{f_s}$$
+   - For `20201007a_HFO_CUT.txt`, 280 events are loaded across the 6 channels (including 42 ripples and 1 fast ripple on channel `FCR`).
 2. **Channel-Specific Visual Highlights**:
    - Detected events (Ripples, Fast Ripples, Spikes) are rendered directly over their respective channel lanes as translucent highlight bands with upper boundary badges.
-   - Hovering over an event on the trace displays its detected frequency, peak z-score, and cycle count (e.g., `491.2 Hz | Z=13.9 | 7.6 cyc`).
+   - Click on any event card in the sidebar (or press `N`/`P`) to center the view directly on that event (e.g., the fast ripple at $t = 27.84\text{ s}$ on `FCR`).
+   - Hovering over an event on the trace displays its detected frequency, peak z-score, and cycle count (e.g., `1000.0 Hz | Z=5.6 | 4.3 cyc`).
 3. **Multi-Layer Toggle & Comparison**:
    - Each imported report creates an independent **Layer** in the **Layers / Files** panel.
    - Click the **Eye icon (`👁️` / `🚫`)** next to any layer to toggle its visibility on and off independently.
-   - This allows instant visual comparison of multiple detector runs or algorithm variants (e.g. comparing the original HFOapp detections with a newly trained clone model) on the same traces.
-   - Use the color swatch next to each layer to assign distinct colors (e.g., Blue for Detector A, Purple for Detector B).
+   - This allows instant visual comparison of multiple detector runs or algorithm variants (e.g. comparing the original HFOapp detections in Blue with a newly trained clone model in Magenta) on the same traces.
+   - Use the color swatch next to each layer to assign distinct colors.
 4. **Summary & Cross-Detector Metrics**:
    - Click **📊 Summary** to view the comprehensive channel-by-channel breakdown (event counts, cumulative durations) and cross-detector comparison tables.
 
