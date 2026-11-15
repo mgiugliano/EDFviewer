@@ -136,11 +136,18 @@ export class EdfClient {
   }
 
   /**
-   * Opens an EDF/EDF+ File, parses the header, and begins background overview indexing.
+   * Opens an EDF, Persyst (.lay + .dat), Neuralynx (*.ncs), or ADInstruments (.adicht) file/files,
+   * parses the header metadata, and begins background overview indexing.
    */
-  async open(file: File): Promise<EdfHeaderInfo> {
+  async open(fileOrFiles: File | File[]): Promise<EdfHeaderInfo> {
     const id = this.nextId++;
-    const msg: OpenRequestMsg = { id, type: 'open', file };
+    const files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles];
+    const msg: OpenRequestMsg = {
+      id,
+      type: 'open',
+      file: files[0],
+      files,
+    };
 
     return new Promise<EdfHeaderInfo>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });

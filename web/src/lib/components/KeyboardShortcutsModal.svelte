@@ -49,8 +49,18 @@
           {/each}
         </div>
 
+        <div class="formats-box">
+          <div class="formats-title">Supported Electrophysiology Formats:</div>
+          <div class="formats-list">
+            <span class="format-tag">EDF / EDF+ (.edf, .rec)</span>
+            <span class="format-tag">Persyst (.lay + .dat)</span>
+            <span class="format-tag">Neuralynx / Persyst (*.ncs)</span>
+            <span class="format-tag">ADInstruments LabChart (.adicht)</span>
+          </div>
+        </div>
+
         <div class="ack-box">
-          <div class="ack-title">EDF Viewer <span class="ack-version">v0.1</span></div>
+          <div class="ack-title">EDF & Electrophysiology Viewer <span class="ack-version">v0.2</span></div>
           <div class="ack-text">by M. Giugliano and O. Kryukova for G. Curia's lab</div>
           <div class="ack-date">Nov 2026</div>
         </div>
@@ -154,6 +164,39 @@
     font-size: 12px;
     color: var(--text-secondary);
     text-align: right;
+  }
+
+  .formats-box {
+    margin-top: 14px;
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+  }
+
+  .formats-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .formats-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .format-tag {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: monospace;
   }
 
   .ack-box {

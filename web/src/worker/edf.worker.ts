@@ -1,5 +1,5 @@
 import initWasm, * as wasmExports from '../wasm/pkg/edf_core.js';
-import { EdfEngine } from '../lib/engine/EdfEngine.js';
+import { UniversalEngine } from '../lib/engine/UniversalEngine.js';
 import type {
   Annotation,
   ScanProgress,
@@ -11,7 +11,7 @@ import type {
 } from '../lib/engine/protocol.js';
 
 let wasmInitialized = false;
-let engine: EdfEngine | null = null;
+let engine: UniversalEngine | null = null;
 let currentFile: File | null = null;
 let scanAbortController: AbortController | null = null;
 let latestViewRequestId = 0;
@@ -145,8 +145,12 @@ self.onmessage = async (e: MessageEvent<WorkerInMessage>) => {
     case 'open': {
       try {
         const wasm = await ensureWasm();
-        currentFile = msg.file;
-        engine = new EdfEngine(currentFile, wasm);
+        const files = msg.files && msg.files.length > 0 ? msg.files : (msg.file ? [msg.file] : []);
+        if (files.length === 0) {
+          throw new Error('No files provided in open request');
+        }
+        currentFile = files[0];
+        engine = new UniversalEngine(files, wasm);
         const header = await engine.open();
 
         const cacheKey = `${currentFile.name}|${currentFile.size}|${currentFile.lastModified}|v1`;

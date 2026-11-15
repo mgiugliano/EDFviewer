@@ -6,7 +6,11 @@
 [![WebAssembly](https://img.shields.io/badge/WebAssembly-WASM-purple.svg)](https://webassembly.org/)
 [![Svelte 5](https://img.shields.io/badge/Svelte-5-ff3e00.svg)](https://svelte.dev/)
 
-An ultra-efficient, client-side web application running **Rust WebAssembly** to open, visualize, filter, analyze, and annotate very long **EDF and EDF+** recordings (such as 24-hour continuous rodent EEG recorded at 4 kHz across 7+ channels).
+An ultra-efficient, client-side web application running **Rust WebAssembly** to open, visualize, filter, analyze, and annotate very long electrophysiology recordings across major research and clinical data formats:
+- **EDF / EDF+ (`.edf`, `.rec`)**: European Data Format full precision continuous and discontinuous records.
+- **Neuralynx / Persyst (`*.ncs`)**: Continuously sampled single- and multi-channel LFP, intracranial sEEG/ECoG, and microelectrode recordings.
+- **Persyst (`.lay` + `.dat`)**: Multi-channel clinical EEG layouts paired with raw multiplexed binary waveform data.
+- **ADInstruments LabChart (`.adicht`)**: Multi-channel PowerLab physiology and electrophysiology recordings.
 
 Multi-gigabyte recordings load seamlessly as if they were tiny files: data chunks are decoded strictly on demand directly from the local disk using `File.slice()`. **Zero data is uploaded to remote servers**, ensuring complete privacy and instantaneous responsiveness.
 
@@ -127,8 +131,12 @@ The matrix is rasterized to an offscreen image and mapped via the **Viridis** co
 
 ### Step 1: Opening a File
 1. Visit [https://blog.giugliano.info/EDFviewer/](https://blog.giugliano.info/EDFviewer/) in Chrome, Edge, Safari, or Firefox.
-2. Click **📂 Open EDF** in the top-left toolbar, or drag and drop any `.edf` / `.rec` file anywhere onto the browser window (e.g., sample recording `20201007a_HFO_CUT.edf`).
-3. The recording duration ($549\text{ s}$), primary sampling rate ($4000\text{ Hz}$), channel count (6 channels: `FCR`, `CA3D-R`, `CA3V-R`, `FCL`, `DGD-L`, `DGV-L`), and EDF indicator will appear in the top metadata pill.
+2. Click **📂 Open File** in the top-left toolbar, or drag and drop any supported recording anywhere onto the browser window:
+   - **EDF / EDF+**: Drop a `.edf` or `.rec` file (e.g., sample recording `20201007a_HFO_CUT.edf`).
+   - **Neuralynx / Persyst NCS**: Drop one or more `*.ncs` channel files simultaneously (e.g. `CSC1.ncs`, `CSC2.ncs`).
+   - **Persyst Layout**: Drop both `basename.lay` and `basename.dat` together into the window.
+   - **ADInstruments LabChart**: Drop a `.adicht` recording directly.
+3. The recording duration, primary sampling rate, channel count, and format indicator will appear in the top metadata pill.
 
 ### Step 2: Navigating the Recording
 - **Smooth Panning**: Click and drag horizontally across the traces to glide through time.

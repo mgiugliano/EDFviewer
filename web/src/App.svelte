@@ -465,20 +465,22 @@
   // File Handling
   // -------------------------------------------------------------------------
 
-  async function handleOpenFile(file: File) {
+  async function handleOpenFile(fileOrFiles: File | File[]) {
     if (!edfClient) return;
 
     try {
       isLoading = true;
-      const info = await edfClient.open(file);
+      const files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles];
+      const mainFile = files[0];
+      const info = await edfClient.open(files);
       header = info;
-      fileName = file.name;
+      fileName = files.length > 1 ? `${mainFile.name} (+${files.length - 1} files)` : mainFile.name;
       tStart = 0;
       pageDurationSec = 10;
       scanProgress = null;
 
       // Check if auto-saved montage exists
-      const fileKey = makeFileKey(file.name, info.signals.length);
+      const fileKey = makeFileKey(fileName, info.signals.length);
       const saved = loadAutoMontage(fileKey);
       if (saved) {
         montage = remapMontageToHeader(saved, info);
@@ -488,7 +490,7 @@
       }
 
       // Load saved annotations for this file from IndexedDB
-      currentStorageKey = makeAnnotationStorageKey(file);
+      currentStorageKey = makeAnnotationStorageKey(mainFile);
       const savedAnns = await loadAnnotationsFromIdb(currentStorageKey);
       annotations = savedAnns ? savedAnns : [];
       annotationSets = [];
@@ -523,7 +525,7 @@
       isLoading = false;
     } catch (err: any) {
       isLoading = false;
-      alert(`Failed to open EDF file: ${err?.message || err}`);
+      alert(`Failed to open recording: ${err?.message || err}`);
     }
   }
 
@@ -541,13 +543,45 @@
   function handleWindowDrop(e: DragEvent) {
     e.preventDefault();
     isDraggingFileOver = false;
-    if (e.dataTransfer && e.dataTransfer.files) {
-      for (let i = 0; i < e.dataTransfer.files.length; i++) {
-        const file = e.dataTransfer.files[i];
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const droppedFiles = Array.from(e.dataTransfer.files);
+
+      // Check for NCS files
+      const ncsFiles = droppedFiles.filter((f) => f.name.toLowerCase().endsWith('.ncs'));
+      if (ncsFiles.length > 0) {
+        handleOpenFile(ncsFiles);
+        return;
+      }
+
+      // Check for Persyst .lay (+ optional .dat)
+      const layFile = droppedFiles.find((f) => f.name.toLowerCase().endsWith('.lay'));
+      if (layFile) {
+        const datFile = droppedFiles.find((f) => f.name.toLowerCase().endsWith('.dat'));
+        handleOpenFile(datFile ? [layFile, datFile] : [layFile]);
+        return;
+      }
+
+      // Check for ADInstruments LabChart (.adicht)
+      const adichtFile = droppedFiles.find((f) => f.name.toLowerCase().endsWith('.adicht'));
+      if (adichtFile) {
+        handleOpenFile(adichtFile);
+        return;
+      }
+
+      // Check for EDF / REC
+      const edfFile = droppedFiles.find((f) => {
+        const l = f.name.toLowerCase();
+        return l.endsWith('.edf') || l.endsWith('.rec');
+      });
+      if (edfFile) {
+        handleOpenFile(edfFile);
+        return;
+      }
+
+      // Check for annotations (TXT / CSV / TSV)
+      for (const file of droppedFiles) {
         const lower = file.name.toLowerCase();
-        if (lower.endsWith('.edf') || lower.endsWith('.rec')) {
-          handleOpenFile(file);
-        } else if (lower.endsWith('.txt') || lower.endsWith('.csv') || lower.endsWith('.tsv')) {
+        if (lower.endsWith('.txt') || lower.endsWith('.csv') || lower.endsWith('.tsv')) {
           const reader = new FileReader();
           reader.onload = (re) => {
             const text = re.target?.result;
@@ -1053,7 +1087,7 @@
     <div class="drag-overlay">
       <div class="drag-overlay-box">
         <span class="drag-icon">📥</span>
-        <span>Drop EDF / EDF+ File Here to Open</span>
+        <span>Drop Recording (EDF, NCS, LAY+DAT, ADICHT) Here to Open</span>
       </div>
     </div>
   {/if}

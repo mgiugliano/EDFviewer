@@ -12,7 +12,8 @@ import type {
 export interface OpenRequestMsg {
   id: number;
   type: 'open';
-  file: File;
+  file?: File;
+  files?: File[];
 }
 
 export interface ViewRequestMsg {

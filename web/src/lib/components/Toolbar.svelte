@@ -19,7 +19,7 @@
     isSpectrogramMode?: boolean;
     canEnableSpectrogram?: boolean;
     onToggleSpectrogram?: () => void;
-    onOpenFile: (file: File) => void;
+    onOpenFile: (file: File | File[]) => void;
     onSelectPreset: (preset: SavedMontagePreset) => void;
     onResetDefaultMontage: () => void;
     onOpenSavePresetModal: () => void;
@@ -77,8 +77,12 @@
 
   function handleFileChange(e: Event) {
     const input = e.target as HTMLInputElement;
-    if (input.files && input.files[0]) {
-      onOpenFile(input.files[0]);
+    if (input.files && input.files.length > 0) {
+      if (input.files.length === 1) {
+        onOpenFile(input.files[0]);
+      } else {
+        onOpenFile(Array.from(input.files));
+      }
       input.value = '';
     }
   }
@@ -134,7 +138,8 @@
     <!-- Hidden file inputs -->
     <input
       type="file"
-      accept=".edf,.rec,.EDF,.REC"
+      accept=".edf,.rec,.EDF,.REC,.ncs,.NCS,.lay,.LAY,.dat,.DAT,.adicht,.ADICHT"
+      multiple
       bind:this={fileInputEl}
       onchange={handleFileChange}
       style="display: none;"
@@ -150,9 +155,9 @@
     <button
       class="toolbar-btn primary"
       onclick={() => fileInputEl?.click()}
-      title="Open EDF or EDF+ File"
+      title="Open Electrophysiology Recording (EDF, NCS, LAY+DAT, ADICHT)"
     >
-      <span class="btn-icon">📂</span> Open EDF
+      <span class="btn-icon">📂</span> Open File
     </button>
 
     <!-- File info metadata pill -->
