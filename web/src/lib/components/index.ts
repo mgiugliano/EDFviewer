@@ -11,3 +11,4 @@ export { default as PresetNameModal } from './PresetNameModal.svelte';
 export { default as AnnotationSidebar } from './AnnotationSidebar.svelte';
 export { default as EditAnnotationModal } from './EditAnnotationModal.svelte';
 export { default as AnnotationPalette } from './AnnotationPalette.svelte';
+export { default as HfoSummaryModal } from '../hfo/HfoSummaryModal.svelte';

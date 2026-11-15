@@ -4,38 +4,58 @@
     importAnnotationsCsv,
     getAnnotationCountsByLabel,
     type ViewerAnnotation,
+    type AnnotationSet,
   } from '../annotations/index.js';
 
   interface Props {
     isOpen: boolean;
     fileName: string;
     annotations: ViewerAnnotation[];
+    annotationSets?: AnnotationSet[];
     channelLabels?: string[];
+    hasHfoReports?: boolean;
     onToggleOpen: () => void;
     onJumpToAnnotation: (onsetSec: number) => void;
     onEditAnnotation: (ann: ViewerAnnotation) => void;
     onDeleteAnnotation: (id: string) => void;
     onImportAnnotations: (imported: ViewerAnnotation[]) => void;
     onClearAll: () => void;
+    onToggleSetVisibility?: (setId: string) => void;
+    onDeleteSet?: (setId: string) => void;
+    onChangeSetColor?: (setId: string, color: string) => void;
+    onShowAllSets?: () => void;
+    onHideAllSets?: () => void;
+    onImportHfoText?: (text: string, filename: string) => void;
+    onOpenHfoSummary?: () => void;
   }
 
   let {
     isOpen,
     fileName,
     annotations,
+    annotationSets = [],
     channelLabels = [],
+    hasHfoReports = false,
     onToggleOpen,
     onJumpToAnnotation,
     onEditAnnotation,
     onDeleteAnnotation,
     onImportAnnotations,
     onClearAll,
+    onToggleSetVisibility,
+    onDeleteSet,
+    onChangeSetColor,
+    onShowAllSets,
+    onHideAllSets,
+    onImportHfoText,
+    onOpenHfoSummary,
   }: Props = $props();
 
   let searchText = $state('');
   let filterLabel = $state('ALL');
   let filterChannel = $state('ALL');
   let fileInputEl: HTMLInputElement | null = $state(null);
+  let hfoFileInputEl: HTMLInputElement | null = $state(null);
 
   // Summary counts
   const labelCounts = $derived(getAnnotationCountsByLabel(annotations));
@@ -109,6 +129,24 @@
     }
   }
 
+  function handleHfoFileInputChange(e: Event) {
+    const input = e.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      for (let i = 0; i < input.files.length; i++) {
+        const file = input.files[i];
+        const reader = new FileReader();
+        reader.onload = (re) => {
+          const text = re.target?.result;
+          if (typeof text === 'string') {
+            onImportHfoText?.(text, file.name);
+          }
+        };
+        reader.readAsText(file);
+      }
+      input.value = '';
+    }
+  }
+
   function formatTime(sec: number): string {
     const total = Math.max(0, Math.floor(sec));
     const h = Math.floor(total / 3600);
@@ -130,6 +168,16 @@
   style="display: none;"
 />
 
+<!-- Hidden HFO file input -->
+<input
+  type="file"
+  accept=".txt,.csv,.tsv"
+  multiple
+  bind:this={hfoFileInputEl}
+  onchange={handleHfoFileInputChange}
+  style="display: none;"
+/>
+
 <aside class="annotation-sidebar {isOpen ? 'open' : 'closed'}">
   <!-- Sidebar Header -->
   <div class="sidebar-header">
@@ -148,6 +196,65 @@
   </div>
 
   {#if isOpen}
+    <!-- Annotation Sets / Layers Section -->
+    {#if annotationSets.length > 0}
+      <div class="sets-section">
+        <div class="sets-header">
+          <span class="sets-title">LAYERS / FILES ({annotationSets.length})</span>
+          <div class="sets-header-actions">
+            <button class="set-link-btn" onclick={onShowAllSets}>All</button>
+            <span class="sep">•</span>
+            <button class="set-link-btn" onclick={onHideAllSets}>None</button>
+          </div>
+        </div>
+
+        <div class="sets-list">
+          {#each annotationSets as s (s.id)}
+            <div class="set-row {s.visible ? '' : 'faded'}">
+              <button
+                class="eye-toggle-btn"
+                onclick={() => onToggleSetVisibility?.(s.id)}
+                title={s.visible ? 'Hide this layer' : 'Show this layer'}
+              >
+                {s.visible ? '👁️' : '🚫'}
+              </button>
+
+              <input
+                type="color"
+                class="set-color-input"
+                value={s.color || '#4361ee'}
+                onchange={(e) => onChangeSetColor?.(s.id, (e.target as HTMLInputElement).value)}
+                title="Change layer color"
+              />
+
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div
+                class="set-details"
+                onclick={() => onToggleSetVisibility?.(s.id)}
+                title="Click to toggle visibility"
+              >
+                <span class="set-name-text">{s.name}</span>
+                <span class="set-count-pill">{s.count}</span>
+              </div>
+
+              {#if s.source === 'hfoapp'}
+                <span class="hfo-badge" title="HFOapp Report">HFO</span>
+              {/if}
+
+              <button
+                class="delete-set-btn"
+                onclick={() => onDeleteSet?.(s.id)}
+                title="Remove this layer and its annotations"
+              >
+                ✕
+              </button>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
     <!-- Summary Chips Bar -->
     {#if uniqueLabels.length > 0}
       <div class="summary-section">
@@ -211,14 +318,14 @@
       </div>
     </div>
 
-    <!-- Actions Bar (Export, Import, Clear All) -->
+    <!-- Actions Bar (Export, Import, HFOapp, Clear All) -->
     <div class="actions-section">
       <button
         class="action-btn"
         onclick={handleExportCsv}
         title="Export annotations to CSV file"
       >
-        ⬇ Export CSV
+        ⬇ CSV
       </button>
 
       <button
@@ -226,8 +333,26 @@
         onclick={() => fileInputEl?.click()}
         title="Import annotations from CSV file"
       >
-        ⬆ Import CSV
+        ⬆ CSV
       </button>
+
+      <button
+        class="action-btn hfo-btn"
+        onclick={() => hfoFileInputEl?.click()}
+        title="Import HFOapp (.txt / .csv) detection or summary report"
+      >
+        ⚡ HFOapp
+      </button>
+
+      {#if hasHfoReports}
+        <button
+          class="action-btn summary-btn"
+          onclick={onOpenHfoSummary}
+          title="Open HFO Analysis & Summary Report"
+        >
+          📊 Summary
+        </button>
+      {/if}
 
       {#if annotations.length > 0}
         <button
@@ -239,7 +364,7 @@
           }}
           title="Clear all annotations"
         >
-          🗑 Clear All
+          🗑 Clear
         </button>
       {/if}
     </div>
@@ -295,6 +420,19 @@
 
                 {#if ann.source === 'embedded'}
                   <span class="source-badge">EDF+</span>
+                {/if}
+
+                {#if ann.setId}
+                  {@const matchedSet = annotationSets.find((s) => s.id === ann.setId)}
+                  {#if matchedSet}
+                    <span
+                      class="set-tag-badge"
+                      style="border-color: {matchedSet.color || '#4361ee'}; color: {matchedSet.color || 'inherit'};"
+                      title="From layer: {matchedSet.name}"
+                    >
+                      {matchedSet.name.length > 15 ? matchedSet.name.slice(0, 13) + '…' : matchedSet.name}
+                    </span>
+                  {/if}
                 {/if}
               </div>
 
@@ -543,6 +681,178 @@
 
   .action-btn.danger:hover {
     background: rgba(230, 57, 70, 0.15);
+  }
+
+  .action-btn.hfo-btn {
+    border-color: rgba(37, 99, 235, 0.4);
+    background: rgba(37, 99, 235, 0.1);
+    color: #60a5fa;
+  }
+
+  .action-btn.hfo-btn:hover {
+    background: rgba(37, 99, 235, 0.25);
+  }
+
+  .action-btn.summary-btn {
+    border-color: rgba(147, 51, 234, 0.4);
+    background: rgba(147, 51, 234, 0.1);
+    color: #c084fc;
+  }
+
+  .action-btn.summary-btn:hover {
+    background: rgba(147, 51, 234, 0.25);
+  }
+
+  /* Layers / Sets Section */
+  .sets-section {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    flex-shrink: 0;
+  }
+
+  .sets-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  .sets-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .sets-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .set-link-btn {
+    background: transparent;
+    border: none;
+    color: var(--accent-color, #38bdf8);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 0 2px;
+  }
+
+  .set-link-btn:hover {
+    text-decoration: underline;
+  }
+
+  .sep {
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+
+  .sets-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 140px;
+    overflow-y: auto;
+  }
+
+  .set-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    font-size: 11px;
+    transition: opacity 0.15s, background 0.15s;
+  }
+
+  .set-row.faded {
+    opacity: 0.45;
+    background: transparent;
+  }
+
+  .eye-toggle-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0 2px;
+  }
+
+  .set-color-input {
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    background: transparent;
+  }
+
+  .set-details {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    min-width: 0;
+  }
+
+  .set-name-text {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .set-count-pill {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 1px 5px;
+    font-size: 10px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .hfo-badge {
+    background: rgba(147, 51, 234, 0.2);
+    color: #c084fc;
+    border: 1px solid rgba(147, 51, 234, 0.4);
+    border-radius: 4px;
+    padding: 1px 4px;
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .delete-set-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+
+  .delete-set-btn:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.15);
+  }
+
+  .set-tag-badge {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 9px;
+    font-weight: 600;
+    background: rgba(0, 0, 0, 0.15);
   }
 
   .annotations-list {

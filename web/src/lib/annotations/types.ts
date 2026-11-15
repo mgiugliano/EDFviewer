@@ -1,7 +1,17 @@
-export type AnnotationSource = 'embedded' | 'manual' | 'imported';
+export type AnnotationSource = 'embedded' | 'manual' | 'imported' | 'hfoapp';
+
+export interface AnnotationSet {
+  id: string;
+  name: string;
+  visible: boolean;
+  color?: string;
+  source: AnnotationSource;
+  count: number;
+}
 
 export interface ViewerAnnotation {
   id: string;
+  setId?: string; // Links to parent AnnotationSet
   onset: number; // seconds from recording start
   duration: number; // seconds (0 for instantaneous point marker)
   label: string;
@@ -9,6 +19,7 @@ export interface ViewerAnnotation {
   color?: string; // hex or CSS color
   note?: string; // user text note
   source?: AnnotationSource;
+  metadata?: Record<string, any>; // Extra details (e.g. HFO peak z-score, freq, samples)
 }
 
 export interface AnnotationPreset {

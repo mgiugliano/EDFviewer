@@ -27,6 +27,11 @@ Multi-gigabyte recordings load seamlessly as if they were tiny files: data chunk
 | ![Annotations Sidebar](docs/images/annotations.png) | ![Attribution Modal](docs/images/help_modal.png) |
 | *Fast click/drag event marking, quick palettes (1–9), search filtering, CSV export/import, IndexedDB autosave.* | *Full keyboard shortcuts reference and laboratory acknowledgment.* |
 
+| HFOapp Detections & Layer Visibility Toggles | Quantitative HFO Analysis & Detector Comparison |
+| :---: | :---: |
+| ![HFO Trace Highlights](docs/images/hfo_trace_highlight.png) | ![HFO Summary Modal](docs/images/hfo_summary_modal.png) |
+| *Channel-specific HFO highlight spans (Ripples, Fast Ripples), individual layer toggle (👁️/🚫), color coding, and quick navigation.* | *Channel-by-channel breakdown table (counts, durations) and cross-detector side-by-side comparison.* |
+
 ---
 
 ## Key Highlights
@@ -38,6 +43,7 @@ Multi-gigabyte recordings load seamlessly as if they were tiny files: data chunk
 - **Zero-Phase Digital Filtering**: Causal & anti-causal Butterworth filters (High-pass, Low-pass, Band-pass) and 50/60 Hz Notch filters evaluated via Second-Order Sections (SOS) matching `scipy.signal` within $10^{-15}$.
 - **Flexible Montages & Derivations**: Channel visibility toggling, amplitude re-scaling, polarity inversion, bipolar re-referencing ($V_a - V_b$), and exportable JSON montage presets.
 - **Non-Blocking Annotation Suite**: Click-and-drag or single-click point marking without interruption, quick presets (Seizure, Spike, Artifact, Sleep, etc.), bidirectional navigation (`N`/`P`), and full CSV import/export.
+- **HFOapp & Detector Clone Integration**: Direct drag-and-drop or file import of HFOapp `.txt` and `_summary.txt` reports. Individual layer visibility toggles (`👁️`/`🚫`), customizable layer colors, and cross-detector side-by-side comparison analytics.
 - **Total Data Privacy**: 100% of the computations, signal processing, and rendering occur locally inside the browser. No telemetry or file transmission ever takes place.
 
 ---
@@ -149,6 +155,23 @@ The matrix is rasterized to an offscreen image and mapped via the **Viridis** co
 - **Point Marking**: Hold `Shift` and click at any point on the trace.
 - **Browse Events**: Open the Annotations sidebar (`A`) or jump sequentially using `N` (Next) and `P` (Previous).
 - **CSV Export**: Click **⬇ Export CSV** in the annotations panel to export your event log.
+
+### Step 7: Importing HFOapp Reports & Comparing Detector Runs
+1. **Importing Reports**:
+   - Open your EDF file first.
+   - Click **⚡ HFOapp** in the Annotations panel, or simply **drag-and-drop** any `.txt` detection report (e.g., `20201007a_HFO_CUT.txt`) or `_summary.txt` file directly onto the viewer.
+   - The viewer automatically converts sample locations to exact timestamps based on channel sampling rates:
+     $$\text{onset (s)} = \frac{\text{start\_sample}}{f_s}, \quad \text{duration (s)} = \frac{\text{end\_sample} - \text{start\_sample}}{f_s}$$
+2. **Channel-Specific Visual Highlights**:
+   - Detected events (Ripples, Fast Ripples, Spikes) are rendered directly over their respective channel lanes as translucent highlight bands with upper boundary badges.
+   - Hovering over an event on the trace displays its detected frequency, peak z-score, and cycle count (e.g., `491.2 Hz | Z=13.9 | 7.6 cyc`).
+3. **Multi-Layer Toggle & Comparison**:
+   - Each imported report creates an independent **Layer** in the **Layers / Files** panel.
+   - Click the **Eye icon (`👁️` / `🚫`)** next to any layer to toggle its visibility on and off independently.
+   - This allows instant visual comparison of multiple detector runs or algorithm variants (e.g. comparing the original HFOapp detections with a newly trained clone model) on the same traces.
+   - Use the color swatch next to each layer to assign distinct colors (e.g., Blue for Detector A, Purple for Detector B).
+4. **Summary & Cross-Detector Metrics**:
+   - Click **📊 Summary** to view the comprehensive channel-by-channel breakdown (event counts, cumulative durations) and cross-detector comparison tables.
 
 ---
 

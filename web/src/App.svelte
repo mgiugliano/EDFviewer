@@ -55,9 +55,19 @@
     loadAnnotationsFromIdb,
     makeAnnotationStorageKey,
     clearAnnotationsFromIdb,
+    importAnnotationsCsv,
     type AnnotationPreset,
     type ViewerAnnotation,
+    type AnnotationSet,
   } from './lib/annotations/index.js';
+  import {
+    parseHfoEventFile,
+    parseHfoSummaryFile,
+    computeHfoSummaryFromAnnotations,
+    isHfoSummaryText,
+    type HfoSummaryReport,
+  } from './lib/hfo/hfoParser.js';
+  import HfoSummaryModal from './lib/hfo/HfoSummaryModal.svelte';
 
   // Application State using Svelte 5 Runes
   let edfClient: EdfClient | null = null;
@@ -111,6 +121,9 @@
 
   // Annotations State
   let annotations = $state<ViewerAnnotation[]>([]);
+  let annotationSets = $state<AnnotationSet[]>([]);
+  let hfoReports = $state<{ set: AnnotationSet; report: HfoSummaryReport }[]>([]);
+  let showHfoSummaryModal = $state<boolean>(false);
   let activePreset = $state<AnnotationPreset>(DEFAULT_ANNOTATION_PRESETS[0]);
   let isAnnotateMode = $state<boolean>(false);
   let isAnnotationSidebarOpen = $state<boolean>(false);
@@ -118,6 +131,14 @@
   let showEditAnnotationModal = $state<boolean>(false);
   let currentStorageKey = $state<string>('');
   const autosaver = new AnnotationAutosaver(500);
+
+  const visibleAnnotations = $derived.by(() => {
+    if (annotationSets.length === 0) return annotations;
+    const hiddenSetIds = new Set(
+      annotationSets.filter((s) => !s.visible).map((s) => s.id)
+    );
+    return annotations.filter((a) => !a.setId || !hiddenSetIds.has(a.setId));
+  });
 
   const channelLabels = $derived(montage.channels.map((c) => c.label));
 
@@ -422,6 +443,32 @@
       currentStorageKey = makeAnnotationStorageKey(file);
       const savedAnns = await loadAnnotationsFromIdb(currentStorageKey);
       annotations = savedAnns ? savedAnns : [];
+      annotationSets = [];
+      hfoReports = [];
+
+      // Reconstruct sets if present
+      if (savedAnns && savedAnns.length > 0) {
+        const foundSets = new Map<string, AnnotationSet>();
+        for (const a of savedAnns) {
+          if (a.setId && !foundSets.has(a.setId)) {
+            foundSets.set(a.setId, {
+              id: a.setId,
+              name: a.source === 'hfoapp' ? 'HFOapp Report' : 'Imported Set',
+              visible: true,
+              color: a.color || '#4361ee',
+              source: a.source || 'imported',
+              count: 0,
+            });
+          }
+        }
+        for (const a of savedAnns) {
+          if (a.setId && foundSets.has(a.setId)) {
+            foundSets.get(a.setId)!.count++;
+          }
+        }
+        annotationSets = Array.from(foundSets.values());
+      }
+
       editingAnnotation = null;
       showEditAnnotationModal = false;
 
@@ -446,10 +493,22 @@
   function handleWindowDrop(e: DragEvent) {
     e.preventDefault();
     isDraggingFileOver = false;
-    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      if (file.name.toLowerCase().endsWith('.edf') || file.name.toLowerCase().endsWith('.rec')) {
-        handleOpenFile(file);
+    if (e.dataTransfer && e.dataTransfer.files) {
+      for (let i = 0; i < e.dataTransfer.files.length; i++) {
+        const file = e.dataTransfer.files[i];
+        const lower = file.name.toLowerCase();
+        if (lower.endsWith('.edf') || lower.endsWith('.rec')) {
+          handleOpenFile(file);
+        } else if (lower.endsWith('.txt') || lower.endsWith('.csv') || lower.endsWith('.tsv')) {
+          const reader = new FileReader();
+          reader.onload = (re) => {
+            const text = re.target?.result;
+            if (typeof text === 'string') {
+              handleImportHfoOrCsv(text, file.name);
+            }
+          };
+          reader.readAsText(file);
+        }
       }
     }
   }
@@ -670,6 +729,8 @@
 
   function handleClearAllAnnotations() {
     annotations = [];
+    annotationSets = [];
+    hfoReports = [];
     if (currentStorageKey) {
       clearAnnotationsFromIdb(currentStorageKey);
     }
@@ -681,22 +742,133 @@
     annotations = [...annotations, ...newItems].sort((a, b) => a.onset - b.onset);
   }
 
+  function handleToggleSetVisibility(setId: string) {
+    annotationSets = annotationSets.map((s) =>
+      s.id === setId ? { ...s, visible: !s.visible } : s
+    );
+  }
+
+  function handleDeleteSet(setId: string) {
+    annotationSets = annotationSets.filter((s) => s.id !== setId);
+    annotations = annotations.filter((a) => a.setId !== setId);
+    hfoReports = hfoReports.filter((r) => r.set.id !== setId);
+  }
+
+  function handleChangeSetColor(setId: string, color: string) {
+    annotationSets = annotationSets.map((s) =>
+      s.id === setId ? { ...s, color } : s
+    );
+    annotations = annotations.map((a) =>
+      a.setId === setId ? { ...a, color } : a
+    );
+  }
+
+  function handleShowAllSets() {
+    annotationSets = annotationSets.map((s) => ({ ...s, visible: true }));
+  }
+
+  function handleHideAllSets() {
+    annotationSets = annotationSets.map((s) => ({ ...s, visible: false }));
+  }
+
+  function handleImportHfoOrCsv(text: string, importedFileName: string) {
+    if (isHfoSummaryText(text)) {
+      const report = parseHfoSummaryFile(text, importedFileName);
+      const setId = `hfo_sum_${Date.now()}`;
+      const newSet: AnnotationSet = {
+        id: setId,
+        name: importedFileName,
+        visible: true,
+        color: '#3b82f6',
+        source: 'hfoapp',
+        count: report.totalEvents,
+      };
+      hfoReports = [...hfoReports, { set: newSet, report }];
+      showHfoSummaryModal = true;
+      return;
+    }
+
+    const lower = text.toLowerCase();
+    const isHfoEvent =
+      lower.includes('eventlocation') ||
+      lower.includes('hfoapp') ||
+      (lower.includes('channel') && lower.includes('ripple'));
+
+    if (isHfoEvent) {
+      const fsMap = new Map<string, number>();
+      if (header?.signals) {
+        header.signals.forEach((s) => {
+          fsMap.set(s.label.trim().toLowerCase(), s.sample_rate);
+        });
+      }
+
+      const palette = [
+        '#2563eb',
+        '#9333ea',
+        '#059669',
+        '#d97706',
+        '#dc2626',
+        '#0891b2',
+        '#4f46e5',
+      ];
+      const assignedColor = palette[annotationSets.length % palette.length];
+
+      const { annotations: newAnns, set: newSet } = parseHfoEventFile(
+        text,
+        fsMap,
+        {
+          setName: importedFileName,
+          setColor: assignedColor,
+        }
+      );
+
+      if (newAnns.length === 0) {
+        alert(`No HFO events could be parsed from ${importedFileName}.`);
+        return;
+      }
+
+      const computedSummary = computeHfoSummaryFromAnnotations(
+        newAnns,
+        importedFileName
+      );
+      hfoReports = [...hfoReports, { set: newSet, report: computedSummary }];
+      annotationSets = [...annotationSets, newSet];
+      annotations = [...annotations, ...newAnns].sort(
+        (a, b) => a.onset - b.onset
+      );
+      isAnnotationSidebarOpen = true;
+      return;
+    }
+
+    try {
+      const imported = importAnnotationsCsv(text);
+      if (imported.length > 0) {
+        handleImportAnnotations(imported);
+        isAnnotationSidebarOpen = true;
+      } else {
+        alert('File was not recognized as an HFOapp report or valid CSV.');
+      }
+    } catch (err: any) {
+      alert(`Failed to import file: ${err?.message || err}`);
+    }
+  }
+
   function handleJumpToAnnotation(onsetSec: number) {
     const target = Math.max(0, onsetSec - 1.0);
     tStart = Math.max(0, Math.min(Math.max(0, duration - pageDurationSec), target));
   }
 
   function handleJumpNextAnnotation() {
-    if (annotations.length === 0) return;
-    const nextTime = findNextAnnotationTime(annotations, tStart);
+    if (visibleAnnotations.length === 0) return;
+    const nextTime = findNextAnnotationTime(visibleAnnotations, tStart);
     if (nextTime !== null) {
       handleJumpToAnnotation(nextTime);
     }
   }
 
   function handleJumpPrevAnnotation() {
-    if (annotations.length === 0) return;
-    const prevTime = findPrevAnnotationTime(annotations, tStart);
+    if (visibleAnnotations.length === 0) return;
+    const prevTime = findPrevAnnotationTime(visibleAnnotations, tStart);
     if (prevTime !== null) {
       handleJumpToAnnotation(prevTime);
     }
@@ -849,7 +1021,7 @@
     {lineThickness}
     {isSidebarOpen}
     {isAnnotationSidebarOpen}
-    annotationCount={annotations.length}
+    annotationCount={visibleAnnotations.length}
     {isSpectrogramMode}
     {canEnableSpectrogram}
     onToggleSpectrogram={handleToggleSpectrogram}
@@ -901,7 +1073,7 @@
           {isLoading}
           {lineThickness}
           {needsZoomWarning}
-          {annotations}
+          annotations={visibleAnnotations}
           {isAnnotateMode}
           {activePreset}
           selectedAnnotationId={editingAnnotation?.id ?? null}
@@ -942,8 +1114,10 @@
     <AnnotationSidebar
       isOpen={isAnnotationSidebarOpen}
       {fileName}
-      {annotations}
+      annotations={visibleAnnotations}
+      {annotationSets}
       {channelLabels}
+      hasHfoReports={hfoReports.length > 0}
       onToggleOpen={() =>
         (isAnnotationSidebarOpen = !isAnnotationSidebarOpen)}
       onJumpToAnnotation={handleJumpToAnnotation}
@@ -954,6 +1128,13 @@
       onDeleteAnnotation={handleDeleteAnnotation}
       onImportAnnotations={handleImportAnnotations}
       onClearAll={handleClearAllAnnotations}
+      onToggleSetVisibility={handleToggleSetVisibility}
+      onDeleteSet={handleDeleteSet}
+      onChangeSetColor={handleChangeSetColor}
+      onShowAllSets={handleShowAllSets}
+      onHideAllSets={handleHideAllSets}
+      onImportHfoText={handleImportHfoOrCsv}
+      onOpenHfoSummary={() => (showHfoSummaryModal = true)}
     />
   </div>
 
@@ -964,7 +1145,7 @@
       <AnnotationPalette
         {isAnnotateMode}
         {activePreset}
-        annotationCount={annotations.length}
+        annotationCount={visibleAnnotations.length}
         onToggleAnnotateMode={() => (isAnnotateMode = !isAnnotateMode)}
         onSelectPreset={(p) => {
           activePreset = p;
@@ -1053,6 +1234,13 @@
       showEditAnnotationModal = false;
       editingAnnotation = null;
     }}
+  />
+
+  <!-- HFO Analysis & Summary Modal -->
+  <HfoSummaryModal
+    isOpen={showHfoSummaryModal}
+    reports={hfoReports}
+    onClose={() => (showHfoSummaryModal = false)}
   />
 </div>
 
