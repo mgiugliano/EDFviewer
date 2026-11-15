@@ -15,7 +15,8 @@ An ultra-efficient, client-side web application running **Rust WebAssembly** to 
 Multi-gigabyte recordings load seamlessly as if they were tiny files: data chunks are decoded strictly on demand directly from the local disk using `File.slice()`. **Zero data is uploaded to remote servers**, ensuring complete privacy and instantaneous responsiveness.
 
 **Live Application**: [https://blog.giugliano.info/EDFviewer/](https://blog.giugliano.info/EDFviewer/)  
-*(Alternative mirror: [https://mgiugliano.github.io/EDFviewer/](https://mgiugliano.github.io/EDFviewer/))*
+*(Alternative mirror: [https://mgiugliano.github.io/EDFviewer/](https://mgiugliano.github.io/EDFviewer/))*  
+📖 **Comprehensive Operator Manual & Technical Guide**: [docs/MANUAL.md](docs/MANUAL.md)
 
 ---
 
@@ -295,8 +296,10 @@ cd web && node smoke_test.mjs
 
 ## Attribution & Acknowledgments
 
-**EDF Viewer v0.1**  
+**EDF & Electrophysiology Viewer v0.2**  
 Developed by **M. Giugliano** and **O. Kryukova** for **G. Curia's Laboratory**.  
 *November 2026.*
+
+Detailed documentation is available in the [Comprehensive Operator Manual & Technical Guide](docs/MANUAL.md).
 
 Released under the [MIT License](LICENSE).
